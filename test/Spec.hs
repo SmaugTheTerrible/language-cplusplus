@@ -1,2 +1,10 @@
+import           Test.HUnit
+import           Control.Monad                  ( void )
+
+import qualified CPPTest.LexerTest             as Lex
+
+tests :: Test
+tests = TestList [Lex.tests]
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = void $ runTestTT tests

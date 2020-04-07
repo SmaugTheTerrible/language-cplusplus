@@ -1,0 +1,56 @@
+module Language.CPlusPlus.Preprocessor where
+
+import Language.CPlusPlus.Internal.Lexer
+
+-- cpp
+-- preprocessing-file:	 
+--     group[opt]
+-- group:	 
+--     group-part
+--     group group-part
+-- group-part:	 
+--     if-section
+--     control-line
+--     text-line     C++0x
+--     # non-directive     C++0x
+-- if-section:	 
+--     if-group elif-groups[opt] else-group[opt] endif-line
+-- if-group:	 
+--     # if constant-expression new-line group[opt]
+--     # ifdef identifier new-line group[opt]
+--     # ifndef identifier new-line group[opt]
+-- elif-groups:	 
+--     elif-group
+--     elif-groups elif-group
+-- elif-group:	 
+--     # elif constant-expression new-line group[opt]
+-- else-group:	 
+--     # else new-line group[opt]
+-- endif-line:	 
+--     # endif new-line
+-- control-line:	 
+--     # include pp-tokens new-line
+--     # define identifier replacement-list new-line
+--     # define identifier lparen identifier-list[opt] ) replacement-list new-line     C++0x
+--     # define identifier lparen identifier-list , ... ) replacement-list new-line     C++0x
+--     # undef identifier new-line
+--     # line pp-tokens new-line
+--     # error pp-tokens[opt] new-line
+--     # pragma pp-tokens[opt] new-line
+--     # new-line
+-- text-line:	 
+--     pp-tokens[opt] new-line     C++0x
+-- non-directive:	 
+--     pp-tokens new-line     C++0x
+-- lparen:	 
+--     a ( character not immediately preceded by white-space
+-- identifier-list:	 
+--     identifier
+--     identifier-list , identifier
+-- replacement-list:	 
+--     pp-tokens[opt]
+-- pp-tokens:	 
+--     preprocessing-token
+--     pp-tokens preprocessing-token
+-- new-line:	 
+--     the new-line character

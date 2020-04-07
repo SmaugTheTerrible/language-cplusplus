@@ -1,6 +1,11 @@
 module Main where
 
-import Lib
+import Language.CPlusPlus.Internal.Lexer
+
+test :: String
+test = "{}"
 
 main :: IO ()
-main = someFunc
+main = do 
+  let res = lexer test
+  print res

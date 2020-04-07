@@ -1,3 +1,4 @@
 .stack-work/
 language-cplusplus.cabal
+hie.yaml
 *~
