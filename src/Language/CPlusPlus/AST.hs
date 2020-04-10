@@ -570,7 +570,6 @@ data AssignmentOperatorType
 
 data Statement
   --  	attribute-specifier-seq[opt] identifier : statement
-
   = LabeledStatement
       { _labeledStatementPos        :: SourcePos
       , _labeledStatementAttributes :: [AttributeSpecifier]
@@ -578,7 +577,6 @@ data Statement
       , _labeledStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] case constant-expression : statement
-
   | LabeledCaseStatement
       { _labeledCaseStatementPos        :: SourcePos
       , _labeledCaseStatementAttributes :: [AttributeSpecifier]
@@ -586,34 +584,27 @@ data Statement
       , _labeledCaseStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] default : statement
-
   | LabeledDefaultStatement
       { _labeledDefaultStatementPos        :: SourcePos
       , _labeledDefaultStatementAttributes :: [AttributeSpecifier]
       , _labeledDefaultStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] expression-statement     C++0x
-
   --  	expression[opt] ;
-
   | ExpressionStatement
       { _expressionStatementPos        :: SourcePos
       , _expressionStatementAttributes :: [AttributeSpecifier]
       , _expressionStatementValue      :: Maybe Expression
       }
   --  	attribute-specifier-seq[opt] compound-statement     C++0x
-
   --  	{ statement-seq[opt] }
-
   | CompoundStatement
       { _compoundStatementPos        :: SourcePos
       , _compoundStatementAttributes :: [AttributeSpecifier]
       , _compoundStatementBlock      :: [Statement]
       }
   --  	attribute-specifier-seq[opt] selection-statement     C++0x
-
   --  	if ( condition ) statement
-
   | IfStatement
       { _ifStatementPos        :: SourcePos
       , _ifStatementAttributes :: [AttributeSpecifier]
@@ -621,7 +612,6 @@ data Statement
       , _ifStatementBlock      :: Statement
       }
   --  	if ( condition ) statement else statement
-
   | IfElseStatement
       { _ifElseStatementPos        :: SourcePos
       , _ifElseStatementAttributes :: [AttributeSpecifier]
@@ -630,7 +620,6 @@ data Statement
       , _ifElseStatementElseBlock  :: Statement
       }
   --  	switch ( condition ) statement
-
   | SwitchStatement
       { _switchStatementPos        :: SourcePos
       , _switchStatementAttributes :: [AttributeSpecifier]
@@ -638,9 +627,7 @@ data Statement
       , _switchStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] iteration-statement     C++0x
-
   --  	while ( condition ) statement
-
   | WhileStatement
       { _whileStatementPos        :: SourcePos
       , _whileStatementAttributes :: [AttributeSpecifier]
@@ -648,7 +635,6 @@ data Statement
       , _whileStatementBlock      :: Statement
       }
   --  	do statement while ( expression ) ;
-
   | DoWhileStatement
       { _doWhileStatementPos        :: SourcePos
       , _doWhileStatementAttributes :: [AttributeSpecifier]
@@ -656,7 +642,6 @@ data Statement
       , _doWhileStatementExpression :: Expression
       }
   --  	for ( for-init-statement condition[opt] ; expression[opt] ) statement
-
   | ForStatement
       { _forStatementPos        :: SourcePos
       , _forStatementAttributes :: [AttributeSpecifier]
@@ -666,7 +651,6 @@ data Statement
       , _forStatementBlock      :: Statement
       }
   --  	for ( for-range-declaration : for-range-initializer ) statement     C++0x
-
   | ForRangeStatement
       { _forRangeStatementPos         :: SourcePos
       , _forRangeStatementAttributes  :: [AttributeSpecifier]
@@ -675,45 +659,41 @@ data Statement
       , _forRangeStatementBlock       :: Statement
       }
   --  	attribute-specifier-seq[opt] jump-statement     C++0x
-
   --  	break ;
-
   | BreakStatement
       { _breakStatementPos        :: SourcePos
       , _breakStatementAttributes :: [AttributeSpecifier]
       }
   --  	continue ;
-
   | ContinueStatement
       { _continueStatementPos        :: SourcePos
       , _continueStatementAttributes :: [AttributeSpecifier]
       }
   --  	return expression[opt] ;
-
-  --  	return braced-init-list[opt] ;     C++0x
-
   | ReturnStatement
       { _returnStatementPos        :: SourcePos
       , _returnStatementAttributes :: [AttributeSpecifier]
-      , _returnStatementValue      :: Maybe (Either Expression BracedInitList)
+      , _returnStatementValue      :: Maybe Expression
+      }
+  --  	return braced-init-list[opt] ;     C++0x
+  | ReturnBracedStatement 
+      { _returnBracedStatementPos        :: SourcePos
+      , _returnBracedStatementAttributes :: [AttributeSpecifier]
+      , _returnBracedStatementValue      :: Maybe BracedInitList
       }
   --  	goto identifier ;
-
   | GotoStatement
       { _gotoStatementPos        :: SourcePos
       , _gotoStatementAttributes :: [AttributeSpecifier]
       , _gotoStatementLabel      :: Identifier
       }
   --  	declaration-statement
-
   | DeclarationStatement
       { _declarationStatementPos   :: SourcePos
       , _declarationStatementValue :: Declaration
       }
   --  	attribute-specifier-seq[opt] try-block
-
   --  	try compound-statement handler-seq
-
   | TryStatement
       { _tryStatementPos        :: SourcePos
       , _tryStatementAttributes :: [AttributeSpecifier]
@@ -724,13 +704,11 @@ data Statement
 
 data Condition
   --  	expression
-
   = ExpressionCondition
       { _expressionConditionPos   :: SourcePos
       , _expressionConditionValue :: Expression
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq declarator = initializer-clause     C++0x
-
   | InitializerCondition
       { _initializerConditionPos            :: SourcePos
       , _initializerConditionAttributes     :: [AttributeSpecifier]
@@ -739,7 +717,6 @@ data Condition
       , _initializerConditionInitializer    :: InitializerClause
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq declarator braced-init-list     C++0x
-
   | InitBracedCondition
       { _initBracedConditionPos            :: SourcePos
       , _initBracedConditionAttributes     :: [AttributeSpecifier]
@@ -774,11 +751,8 @@ data ForRangeInitializer =
 
 data Declaration
   --  	block-declaration
-
   --  	simple-declaration
-
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] init-declarator-list[opt] ;     C++0x
-
   = SimpleDeclaration
       { _simpleDeclarationPos             :: SourcePos
       , _simpleDeclarationAttributes      :: [AttributeSpecifier]
@@ -786,26 +760,20 @@ data Declaration
       , _simpleDeclarationInitDeclarators :: [InitDeclarator]
       }
   --  	asm-definition
-
   --  	asm ( string-literal ) ;
-
   | AsmDefinition
       { _asmDefinitionPos    :: SourcePos
       , _asmDefinitionString :: Literal
       }
   --  	namespace-alias-definition
-
   --  	namespace identifier = qualified-namespace-specifier ;
-
   | NamespaceAliasDefinition
       { _namespaceAliasDefinitionPos       :: SourcePos
       , _namespaceAliasDefinitionId        :: Identifier
       , _namespaceAliasDefinitionSpecifier :: QualifiedNamespaceSpecifier
       }
   --  	using-declaration
-
   --  	using typename[opt] ::opt nested-name-specifier unqualified-id ;
-
   | UsingNestedDeclaration
       { _usingNestedDeclarationPos           :: SourcePos
       , _usingNestedDeclarationTypename      :: Maybe TypeName
@@ -814,15 +782,12 @@ data Declaration
       , _usingNestedDeclarationId            :: UnqualifiedId
       }
   --  	using :: unqualified-id ;
-
   | UsingDeclaration
       { _usingDeclarationPos :: SourcePos
       , _usingDeclarationId  :: Identifier
       }
   --  	using-directive
-
   --  	attribute-specifier-seq[opt] using namespace ::opt nested-name-specifier[opt] namespace-name ;
-
   | UsingDirective
       { _usingDirectivePos           :: SourcePos
       , _usingDirectiveAttributes    :: [AttributeSpecifier]
@@ -831,18 +796,14 @@ data Declaration
       , _usingDirectiveName          :: NamespaceName
       }
   --  	static_assert-declaration     C++0x
-
   --  	static_assert ( constant-expression , string-literal ) ;     C++0x
-
   | StaticAssertDeclaration
       { _staticAssertDeclarationPos        :: SourcePos
       , _staticAssertDeclarationExpression :: Expression
       , _staticAssertDeclarationString     :: Literal
       }
   --  	alias-declaration     C++0x
-
   --  	using identifier = type-id ;     C++0x
-
   | AliasDeclaration
       { _aliasDeclarationPos  :: SourcePos
       , _aliasDeclarationId   :: Identifier
@@ -2204,6 +2165,7 @@ data TypenameSpecifier
 data TryBlock =
   TryBlock
     { _tryBlockPos      :: SourcePos
+    , _tryAttributes    :: [AttributeSpecifier]
     , _tryBlockCompound :: Statement
     , _tryBlockHandlers :: [Handler]
     }

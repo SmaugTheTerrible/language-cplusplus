@@ -790,7 +790,33 @@ assignmentExpression = do
     <?> "assignment expression"
 
 assignmentOperator :: P AssignmentOperator
-assignmentOperator = undefined
+assignmentOperator = do
+  let operator p = AssignmentOperator <$> pos <*> p
+  let assign           = operator $ opAssign >> pure Assign
+  let assignMul        = operator $ opAssignMul >> pure AssignMultiply
+  let assignDiv        = operator $ opAssignDiv >> pure AssignDivision
+  let assignRem        = operator $ opAssignRem >> pure AssignRemain
+  let assignPlus       = operator $ opAssignPlus >> pure AssignAdd
+  let assignMinus      = operator $ opAssignMinus >> pure AssignSubstract
+  let assignRightShift = operator $ opAssignRightShift >> pure AssignRightShift
+  let assignLeftShift  = operator $ opAssignLeftShift >> pure AssignLeftShift
+  let assignAnd        = operator $ opAssignAnd >> pure AssignAnd
+  let assignXor        = operator $ opAssignXor >> pure AssignXor
+  let assignOr         = operator $ opAssignOr >> pure AssignOr
+  choice
+      [ assign
+      , assignMul
+      , assignDiv
+      , assignRem
+      , assignPlus
+      , assignMinus
+      , assignRightShift
+      , assignLeftShift
+      , assignAnd
+      , assignXor
+      , assignOr
+      ]
+    <?> "assignment operator"
 
 -- expr.comma
 -- expression:
@@ -822,7 +848,18 @@ constantExpression = conditionalExpression <?> "constant expression"
 --  	declaration-statement
 --  	attribute-specifier-seq[opt] try-block
 statement :: P Statement
-statement = undefined
+statement =
+  choice
+      [ labeledStatement
+      , expressionStatement
+      , compoundStatement
+      , selectionStatement
+      , iterationStatement
+      , jumpStatement
+      , declarationStatement
+--  , tryStatement
+      ]
+    <?> "statement"
 
 -- stmt.label
 -- labeled-statement:
@@ -830,13 +867,40 @@ statement = undefined
 --  	attribute-specifier-seq[opt] case constant-expression : statement
 --  	attribute-specifier-seq[opt] default : statement
 labeledStatement :: P Statement
-labeledStatement = undefined
+labeledStatement = do
+  let labeled =
+        LabeledStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> identifier
+          <*> (colon >> statement)
+  let caseSt =
+        LabeledCaseStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwCase >> expression)
+          <*> (colon >> statement)
+  let defaultSt =
+        LabeledDefaultStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwDefault >> colon >> statement)
+  choice [labeled, caseSt, defaultSt] <?> "labeled statement"
 
 -- stmt.expr
 -- expression-statement:
 --  	expression[opt] ;
 expressionStatement :: P Statement
-expressionStatement = undefined
+expressionStatement =
+  ExpressionStatement
+    <$> pos
+    <*> option [] attributeSpecifierSeq
+    <*> do
+          e <- optionMaybe expression
+          semi
+          pure e
+    <?> "expression statement"
+
 
 -- stmt.block
 -- compound-statement:
@@ -845,10 +909,15 @@ expressionStatement = undefined
 --  	statement
 --  	statement-seq statement
 compoundStatement :: P Statement
-compoundStatement = undefined
+compoundStatement =
+  CompoundStatement
+    <$> pos
+    <*> option [] attributeSpecifierSeq
+    <*> braces (option [] statementSeq)
+    <?> "compound statement"
 
 statementSeq :: P [Statement]
-statementSeq = undefined
+statementSeq = many1 statement
 
 -- stmt.select
 -- selection-statement:
@@ -860,10 +929,46 @@ statementSeq = undefined
 --  	attribute-specifier-seq[opt] decl-specifier-seq declarator = initializer-clause     C++0x
 --  	attribute-specifier-seq[opt] decl-specifier-seq declarator braced-init-list     C++0x
 selectionStatement :: P Statement
-selectionStatement = undefined
+selectionStatement = do
+  let ifStat =
+        IfStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwIf >> parens condition)
+          <*> statement
+  let ifElseStat =
+        IfElseStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwIf >> parens condition)
+          <*> statement
+          <*> (kwElse >> statement)
+  let switchStat =
+        SwitchStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> parens condition
+          <*> statement
+  choice [try ifElseStat, ifStat, switchStat] <?> "selection statement"
 
 condition :: P Condition
-condition = undefined
+condition = do
+  let exprCond = ExpressionCondition <$> pos <*> expression
+  let assignCond =
+        InitializerCondition
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> declSpecifierSeq
+          <*> declarator
+          <*> (opAssign >> initializerClause)
+  let bracedInitListCond =
+        InitBracedCondition
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> declSpecifierSeq
+          <*> declarator
+          <*> bracedInitList
+  choice [try exprCond, try assignCond, try bracedInitListCond] <?> "condition"
 
 -- stmt.iter
 -- iteration-statement:
@@ -871,6 +976,41 @@ condition = undefined
 --  	do statement while ( expression ) ;
 --  	for ( for-init-statement condition[opt] ; expression[opt] ) statement
 --  	for ( for-range-declaration : for-range-initializer ) statement     C++0x
+iterationStatement :: P Statement
+iterationStatement = do
+  let whileStat =
+        WhileStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwWhile >> parens condition)
+          <*> statement
+  let doWhileStat =
+        DoWhileStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwDo >> statement)
+          <*> do
+                kwWhile
+                e <- parens expression
+                semi
+                pure e
+  let forStat =
+        ForStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwFor >> leftParen >> forInitStatement)
+          <*> optionMaybe condition
+          <*> (semi >> optionMaybe expression)
+          <*> (rightParen >> statement)
+  let forRange =
+        ForRangeStatement
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwFor >> leftParen >> forRangeDeclaration)
+          <*> (colon >> forRangeInitializer)
+          <*> (rightParen >> statement)
+  choice [whileStat, doWhileStat, forStat, forRange] <?> "iteration statement"
+
 -- for-init-statement:
 --  	expression-statement
 --  	simple-declaration
@@ -879,17 +1019,28 @@ condition = undefined
 -- for-range-initializer:
 --  	expression
 --    braced-init-list     C++0x
-iterationStatement :: P Statement
-iterationStatement = undefined
-
 forInitStatement :: P ForInitStatement
-forInitStatement = undefined
+forInitStatement =
+  ForInitStatement
+    <$> pos
+    <*> (Left <$> expressionStatement <|> Right <$> simpleDeclaration)
+    <?> "for init statement"
 
 forRangeDeclaration :: P ForRangeDeclaration
-forRangeDeclaration = undefined
+forRangeDeclaration =
+  ForRangeDeclaration
+    <$> pos
+    <*> option [] attributeSpecifierSeq
+    <*> typeSpecifierSeq
+    <*> declarator
+    <?> "for range declaration"
 
 forRangeInitializer :: P ForRangeInitializer
-forRangeInitializer = undefined
+forRangeInitializer =
+  ForRangeInitializer
+    <$> pos
+    <*> (Left <$> expression <|> Right <$> bracedInitList)
+    <?> "for range initializer"
 
 -- stmt.jump
 -- jump-statement:
@@ -899,13 +1050,49 @@ forRangeInitializer = undefined
 --  	return braced-init-list[opt] ;     C++0x
 --  	goto identifier ;
 jumpStatement :: P Statement
-jumpStatement = undefined
+jumpStatement = do
+  let break = do
+        pos   <- pos
+        attrs <- option [] attributeSpecifierSeq
+        kwBreak
+        semi
+        pure $ BreakStatement pos attrs
+  let continue = do
+        pos   <- pos
+        attrs <- option [] attributeSpecifierSeq
+        kwContinue
+        semi
+        pure $ ContinueStatement pos attrs
+  let returnExpr = do
+        pos   <- pos
+        attrs <- option [] attributeSpecifierSeq
+        kwReturn
+        e <- optionMaybe expression
+        semi
+        pure $ ReturnStatement pos attrs e
+  let returnBraced = do
+        pos   <- pos
+        attrs <- option [] attributeSpecifierSeq
+        kwReturn
+        b <- optionMaybe bracedInitList
+        semi
+        pure $ ReturnBracedStatement pos attrs b
+  let goto = do
+        pos   <- pos
+        attrs <- option [] attributeSpecifierSeq
+        kwGoto
+        i <- identifier
+        semi
+        pure $ GotoStatement pos attrs i
+  choice [try break, try continue, try returnExpr, try returnBraced, goto]
+    <?> "jump statement"
 
 -- stmt.dcl
 -- declaration-statement:
 --  	block-declaration
 declarationStatement :: P Statement
-declarationStatement = undefined
+declarationStatement =
+  DeclarationStatement <$> pos <*> blockDeclaration <?> "declaration statement"
 
 -- dcl.dcl
 -- declaration-seq:
