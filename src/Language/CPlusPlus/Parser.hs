@@ -3,10 +3,12 @@ module Language.CPlusPlus.Parser where
 import           Language.CPlusPlus.AST
 import           Language.CPlusPlus.Internal.Base
 import           Language.CPlusPlus.Internal.Lexer
+                                         hiding ( pos )
 import           Language.CPlusPlus.Internal.Types.Lexer
 
 import           Text.Parsec             hiding ( parse )
 
+-- https://www.nongnu.org/hcb/
 -- Hyperlinked C++ BNF Grammar
 -- By Alessio Marchetti
 --
@@ -14,7 +16,7 @@ import           Text.Parsec             hiding ( parse )
 --
 -- Last updated: 12-Feb-2016
 -- BNF Grammar Rules
-
+--
 -- basic.link
 -- translation-unit:
 --  	declaration-seq[opt]
@@ -35,8 +37,8 @@ translationUnit = TU <$> option [] declarationSeq <?> "translation unit"
 primaryExpression :: P Expression
 primaryExpression =
   do
-      let literalExpr  = LiteralExpression <$> getPosition <*> literal
-      let thisExpr     = kwThis >> ThisExpression <$> getPosition
+      let literalExpr  = LiteralExpression <$> pos <*> literal
+      let thisExpr     = kwThis >> ThisExpression <$> pos
       let parensedExpr = parens expression
       choice
         [literalExpr, thisExpr, parensedExpr, idExpression, lambdaExpression]
@@ -45,7 +47,7 @@ primaryExpression =
 idExpression :: P Expression
 idExpression =
   IdExpression
-    <$> getPosition
+    <$> pos
     <*> (Left <$> unqualifiedId <|> Right <$> qualifiedId)
     <?> "id expression"
 
@@ -60,16 +62,20 @@ idExpression =
 unqualifiedId :: P UnqualifiedId
 unqualifiedId =
   do
-      let idIdentifier = UnqualifiedIdIdentifier <$> getPosition <*> identifier
+      let idIdentifier = UnqualifiedIdIdentifier <$> pos <*> identifier
       let operatorFunctionId' =
-            UnqualifiedIdOperatorFunctionId
-              <$> getPosition
-              <*> operatorFunctionId
-      let conversionFunctionId' = undefined
-      let literalOperatorId'    = undefined
-      let destructorClass       = undefined
-      let destructorDecltype    = undefined
-      let templateId'           = undefined
+            UnqualifiedIdOperatorFunctionId <$> pos <*> operatorFunctionId
+      let conversionFunctionId' =
+            UnqualifiedIdConversionFunctionId <$> pos <*> conversionFunctionId
+      let literalOperatorId' =
+            UnqualifiedIdLiteralOperatorId <$> pos <*> literalOperatorId
+      let destructorClass =
+            UnqualifiedIdDestructorClass <$> pos <*> try (opTilda >> className)
+      let destructorDecltype =
+            UnqualifiedIdDestructorDecltype
+              <$> pos
+              <*> (opTilda >> decltypeSpecifier)
+      let templateId' = UnqualifiedIdTemplateId <$> pos <*> templateId
       choice
         [ idIdentifier
         , operatorFunctionId'
@@ -88,7 +94,14 @@ unqualifiedId =
 --  	:: literal-operator-id     C++0x
 --  	:: template-id
 qualifiedId :: P QualifiedId
-qualifiedId = undefined
+qualifiedId =
+  QualifiedIdNestedId
+    <$> pos
+    <*> optionBool doubleColon
+    <*> nestedNameSpecifier
+    <*> optionBool kwTemplate
+    <*> unqualifiedId
+    <?> "qualified id"
 
 -- nested-name-specifier:
 --  	type-name ::
@@ -97,7 +110,44 @@ qualifiedId = undefined
 --  	nested-name-specifier identifier ::
 --  	nested-name-specifier template[opt] simple-template-id ::
 nestedNameSpecifier :: P NestedNameSpecifier
-nestedNameSpecifier = undefined
+nestedNameSpecifier =
+  do
+      let nameSpecifier = try $ do
+            pos <- pos
+            n   <- typeName
+            doubleColon
+            pure $ NestedNameSpecifierType pos n
+      let namespaceSpecifier = try $ do
+            pos <- pos
+            n   <- namespaceName
+            doubleColon
+            pure $ NestedNameSpecifierNamespace pos n
+      let decltypeSpecifier' = try $ do
+            pos <- pos
+            n   <- decltypeSpecifier
+            doubleColon
+            pure $ NestedNameSpecifierDecltype pos n
+      let idSpecifier = try $ do
+            pos <- pos
+            n   <- nestedNameSpecifier
+            id  <- identifier
+            doubleColon
+            pure $ NestedNameSpecifierIdentifier pos n id
+      let templateSpecifier = do
+            pos <- pos
+            n   <- nestedNameSpecifier
+            b   <- optionBool kwTemplate
+            t   <- simpleTemplateId
+            doubleColon
+            pure $ NestedNameSpecifierTemplate pos n b t
+      choice
+        [ nameSpecifier
+        , namespaceSpecifier
+        , decltypeSpecifier'
+        , idSpecifier
+        , templateSpecifier
+        ]
+    <?> "nested name specifier"
 
 -- expr.prim.lambda
 -- lambda-expression:
@@ -121,25 +171,61 @@ nestedNameSpecifier = undefined
 -- lambda-declarator:
 --  	( parameter-declaration-clause ) mutable[opt] exception-specification[opt] attribute-specifier-seq[opt] trailing-return-type[opt]     C++0x
 lambdaExpression :: P Expression
-lambdaExpression = undefined
+lambdaExpression =
+  LambdaExpression
+    <$> pos
+    <*> lambdaIntroducer
+    <*> optionMaybe lambdaDeclarator
+    <*> compoundStatement
+    <?> "lambda expression"
 
 lambdaIntroducer :: P LambdaIntroducer
-lambdaIntroducer = undefined
+lambdaIntroducer =
+  LambdaIntroducer <$> pos <*> optionMaybe lambdaCapture <?> "lambda introducer"
 
 lambdaCapture :: P LambdaCapture
-lambdaCapture = undefined
+lambdaCapture = do
+  let captureDefault' = LambdaCaptureDefault <$> pos <*> captureDefault
+  let captureList'    = LambdaCaptureList <$> pos <*> captureList
+  let captureDefaultAndList = do
+        pos <- pos
+        d   <- captureDefault
+        comma
+        LambdaCaptureDefaultAndList pos d <$> captureList
+  choice [captureDefaultAndList, captureDefault', captureList']
 
 captureDefault :: P CaptureDefault
-captureDefault = undefined
+captureDefault =
+  CaptureDefault
+    <$> pos
+    <*> ((opAnd >> pure CaptureByRef) <|> (opAssign >> pure CaptureByValue))
+    <?> "capture default"
 
 captureList :: P CaptureList
-captureList = undefined
+captureList =
+  CaptureList
+    <$> pos
+    <*> sepBy1 capture comma
+    <*> optionBool threeDot
+    <?> "capture list"
 
 capture :: P Capture
-capture = undefined
+capture = do
+  let idCapture   = undefined
+  let refCapture  = undefined
+  let thisCapture = undefined
+  choice [idCapture, refCapture, thisCapture] <?> "capture"
 
 lambdaDeclarator :: P LambdaDeclarator
-lambdaDeclarator = undefined
+lambdaDeclarator =
+  LambdaDeclarator
+    <$> pos
+    <*> parens parameterDeclarationClause
+    <*> optionBool kwMutable
+    <*> optionMaybe exceptionSpecification
+    <*> option [] attributeSpecifierSeq
+    <*> optionMaybe trailingReturnType
+    <?> "lambda declarator"
 
 -- expr.post
 -- postfix-expression:
@@ -165,19 +251,171 @@ lambdaDeclarator = undefined
 --  	typeid ( type-id )
 -- expression-list:
 --  	initializer-list
+postfixExpression :: P Expression
+postfixExpression = do
+--  	postfix-expression [ expression ]
+  let getByIndex =
+        GetByIndexExpression
+          <$> pos
+          <*> postfixExpression
+          <*> brackets expression
+--  	postfix-expression [ braced-init-list[opt] ]     C++0x
+  let getByBraced =
+        GetByBracedExpression <$> pos <*> postfixExpression <*> brackets
+          (optionMaybe bracedInitList)
+--  	postfix-expression ( expression-list[opt] )
+  let callExpr = CallExpression <$> pos <*> postfixExpression <*> parens
+        (optionMaybe expressionList)
+--  	simple-type-specifier ( expression-list[opt] )
+  let simpleTypeCall =
+        SimpleTypeCallExpression <$> pos <*> simpleTypeSpecifier <*> parens
+          (optionMaybe expressionList)
+--  	typename-specifier ( expression-list[opt] )
+  let typenameCall =
+        TypenameCallExpression <$> pos <*> typeSpecifier <*> parens
+          (optionMaybe expressionList)
+--  	simple-type-specifier braced-init-list     C++0x
+  let simpleTypeBraced =
+        SimpleTypeWithBracedExpression
+          <$> pos
+          <*> simpleTypeSpecifier
+          <*> bracedInitList
+--  	typename-specifier braced-init-list     C++0x
+  let typenameBraced =
+        TypenameWithBracedExpression
+          <$> pos
+          <*> typenameSpecifier
+          <*> bracedInitList
+--  	postfix-expression . template[opt] id-expression
+  let refField =
+        GetFromRefExpression
+          <$> pos
+          <*> postfixExpression
+          <*> (dot >> optionBool kwTemplate)
+          <*> idExpression
+--  	postfix-expression -> template[opt] id-expression
+  let ptrField =
+        GetFromPtrExpression
+          <$> pos
+          <*> postfixExpression
+          <*> (opArrow >> optionBool kwTemplate)
+          <*> idExpression
+--  	postfix-expression . pseudo-destructor-name
+  let refDestrExpr =
+        GetDestructorFromRefExpression
+          <$> pos
+          <*> postfixExpression
+          <*> (dot >> pseudoDestructorName)
+--  	postfix-expression -> pseudo-destructor-name
+  let ptrDestrExpr =
+        GetDestructorFromPtrExpression
+          <$> pos
+          <*> postfixExpression
+          <*> (opArrow >> pseudoDestructorName)
+--  	postfix-expression ++
+  let postfixIncrExpr = do
+        pos  <- pos
+        expr <- postfixExpression
+        opIncrement
+        pure $ PostIncrementExpression pos expr
+--  	postfix-expression --
+  let postfixDecrExpr = do
+        pos  <- pos
+        expr <- postfixExpression
+        opDecrement
+        pure $ PostDecrementExpression pos expr
+--  	dynamic_cast < type-id > ( expression )
+  let dynamicCast = do
+        pos <- pos
+        kwDynamicCast
+        t    <- angles typeId
+        expr <- parens expression
+        pure $ DynamicCastExpression pos t expr
+--  	static_cast < type-id > ( expression )
+  let staticCast = do
+        pos <- pos
+        kwStaticCast
+        t    <- angles typeId
+        expr <- parens expression
+        pure $ StaticCastExpression pos t expr
+--  	reinterpret_cast < type-id > ( expression )
+  let reinterCast = do
+        pos <- pos
+        kwReinterpretCast
+        t    <- angles typeId
+        expr <- parens expression
+        pure $ ReinterpretCastExpression pos t expr
+--  	const_cast < type-id > ( expression )
+  let constCast = do
+        pos <- pos
+        kwConstCast
+        t    <- angles typeId
+        expr <- parens expression
+        pure $ ConstCastExpression pos t expr
+--  	typeid ( expression )
+--  	typeid ( type-id )
+  let typeIdExpr = do
+        pos <- pos
+        t   <- typeId
+        arg <- parens ((Left <$> expression) <|> (Right <$> typeId))
+        pure $ TypeIdExpression pos t arg
+  choice
+      [ primaryExpression
+      , getByIndex
+      , getByBraced
+      , callExpr
+      , simpleTypeCall
+      , typenameCall
+      , simpleTypeBraced
+      , typenameBraced
+      , refField
+      , ptrField
+      , refDestrExpr
+      , ptrDestrExpr
+      , postfixIncrExpr
+      , postfixDecrExpr
+      , dynamicCast
+      , staticCast
+      , reinterCast
+      , constCast
+      , typeIdExpr
+      ]
+    <?> "postfix expression"
+
+expressionList :: P ExpressionList
+expressionList =
+  ExpressionList <$> pos <*> initializerList <?> "expression list"
+
 -- pseudo-destructor-name:
 --  	::opt nested-name-specifier[opt] type-name :: ~ type-name
 --  	::opt nested-name-specifier template simple-template-id :: ~ type-name     C++0x
 --  	::opt nested-name-specifier[opt] ~ type-name
 --  	~ decltype-specifier     C++0x
-postfixExpression :: P Expression
-postfixExpression = undefined
-
-expressionList :: P [Expression]
-expressionList = undefined
-
 pseudoDestructorName :: P PseudoDestructorName
-pseudoDestructorName = undefined
+pseudoDestructorName = do
+  let nested =
+        PseudoDestructorNameNested
+          <$> pos
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> typeName
+          <*> (doubleColon >> opTilda >> typeName)
+  let temp =
+        PseudoDestructorNameTemplate
+          <$> pos
+          <*> optionBool doubleColon
+          <*> nestedNameSpecifier
+          <*> simpleTemplateId
+          <*> (doubleColon >> opTilda >> typeName)
+  let typeName' =
+        PseudoDestructorNameTypeName
+          <$> pos
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> (opTilda >> typeName)
+  let decltype =
+        PseudoDestructorNameDecltype <$> pos <*> (opTilda >> decltypeSpecifier)
+  choice [nested, temp, typeName', decltype] <?> "pseudo destructor name"
 
 -- expr.unary
 -- unary-expression:
@@ -200,10 +438,48 @@ pseudoDestructorName = undefined
 --  	!
 --  	~
 unaryExpression :: P Expression
-unaryExpression = undefined
+unaryExpression = do
+  let preIncr =
+        PrefIncrementExpression <$> pos <*> (opIncrement >> castExpression)
+  let preDecr =
+        PrefDecrementExpression <$> pos <*> (opDecrement >> castExpression)
+  let unary =
+        UnaryOperationExpression <$> pos <*> unaryOperator <*> castExpression
+  let sizeofExpr = SizeOfExpression <$> pos <*> (kwSizeof >> unaryExpression)
+  let sizeofType = SizeOfTypeExpression <$> pos <*> (kwSizeof >> parens typeId)
+  let sizeofThreeDot =
+        SizeOfThreeDottedExpression
+          <$> pos
+          <*> (kwSizeof >> threeDot >> parens identifier)
+  let align = AlignOfExpression <$> pos <*> (kwAlignof >> parens typeId)
+  choice
+      [ postfixExpression
+      , preIncr
+      , preDecr
+      , unary
+      , sizeofExpr
+      , sizeofType
+      , sizeofThreeDot
+      , align
+      , noexceptExpression
+      , newExpression
+      , deleteExpression
+      ]
+    <?> "unary expression"
 
 unaryOperator :: P UnaryOperator
-unaryOperator = undefined
+unaryOperator =
+  UnaryOperator
+    <$> pos
+    <*> choice
+          [ (opMul >> pure Ptr)
+          , (opAnd >> pure Ref)
+          , (opPlus >> pure UnaryPlus)
+          , (opMinus >> pure UnaryMinus)
+          , (opNot >> pure Not)
+          , (opTilda >> pure Tilda)
+          ]
+    <?> "unary operator"
 
 -- expr.new
 -- new-expression:
@@ -223,42 +499,96 @@ unaryOperator = undefined
 --  	( expression-list[opt] )
 --  	braced-init-list     C++0x
 newExpression :: P Expression
-newExpression = undefined
+newExpression = do
+  let new =
+        NewExpression
+          <$> pos
+          <*> optionBool doubleColon
+          <*> (kwNew >> optionMaybe newPlacement)
+          <*> newTypeId
+          <*> optionMaybe newInitializer
+  let newParensed =
+        NewParensedExpression
+          <$> pos
+          <*> optionBool doubleColon
+          <*> (kwNew >> optionMaybe newPlacement)
+          <*> parens typeId
+          <*> optionMaybe newInitializer
+  try new <|> newParensed <?> "new expression"
 
 newPlacement :: P ExpressionList
-newPlacement = undefined
+newPlacement = parens expressionList <?> "new placement"
 
 newTypeId :: P NewTypeId
-newTypeId = undefined
+newTypeId =
+  NewTypeId
+    <$> pos
+    <*> typeSpecifierSeq
+    <*> optionMaybe newDeclarator
+    <?> "new type id"
 
 newDeclarator :: P NewDeclarator
-newDeclarator = undefined
+newDeclarator = do
+  let newPtr =
+        NewDeclaratorPtr <$> pos <*> ptrOperator <*> optionMaybe newDeclarator
+  let newNoPtr = NewDeclaratorNoptr <$> pos <*> noptrNewDeclarator
+  newPtr <|> newNoPtr <?> "new declarator"
 
 noptrNewDeclarator :: P NoptrNewDeclarator
-noptrNewDeclarator = undefined
+noptrNewDeclarator = do
+  let common =
+        NoptrNewDeclarator
+          <$> pos
+          <*> brackets expression
+          <*> option [] attributeSpecifierSeq
+  let prefixed =
+        NoptrNewDeclaratorPrefixed
+          <$> pos
+          <*> noptrNewDeclarator
+          <*> brackets constantExpression
+          <*> option [] attributeSpecifierSeq
+  common <|> prefixed <?> "noptr new declarator"
 
 newInitializer :: P NewInitializer
-newInitializer = undefined
+newInitializer = do
+  let exprList = NewInitializerExpressionList <$> pos <*> parens
+        (optionMaybe expressionList)
+  let bracedList = NewInitializerBracedList <$> pos <*> bracedInitList
+  exprList <|> bracedList <?> "new initializer"
 
 -- expr.delete
 -- delete-expression:
 --  	::opt delete cast-expression
 --  	::opt delete [ ] cast-expression
 deleteExpression :: P Expression
-deleteExpression = undefined
+deleteExpression = do
+  let common =
+        DeleteExpression
+          <$> pos
+          <*> optionBool doubleColon
+          <*> (kwDelete >> castExpression)
+  let delArray =
+        DeleteArrayExpression
+          <$> pos
+          <*> optionBool doubleColon
+          <*> (kwDelete >> leftBracket >> rightBracket >> castExpression)
+  try common <|> delArray <?> "delete expression"
 
 -- expr.unary.noexcept
 -- noexcept-expression:
 --  	noexcept ( expression )     C++0x
 noexceptExpression :: P Expression
-noexceptExpression = undefined
+noexceptExpression =
+  NoexceptExpression <$> pos <*> (kwNoexcept >> parens expression)
 
 -- expr.cast
 -- cast-expression:
 --  	unary-expression
 --  	( type-id ) cast-expression
 castExpression :: P Expression
-castExpression = undefined
+castExpression = do
+  let cast = CastExpression <$> pos <*> parens typeId <*> castExpression
+  unaryExpression <|> cast <?> "cast expression"
 
 -- expr.mptr.oper
 -- pm-expression:
@@ -266,7 +596,12 @@ castExpression = undefined
 --  	pm-expression .* cast-expression
 --  	pm-expression ->* cast-expression
 pmExpression :: P Expression
-pmExpression = undefined
+pmExpression = do
+  let fromRef =
+        GetPtrFromRefExpression <$> pos <*> pmExpression <*> castExpression
+  let fromPtr =
+        GetPtrFromPtrExpression <$> pos <*> pmExpression <*> castExpression
+  choice [castExpression, try fromRef, fromPtr] <?> "pm expression"
 
 -- expr.mul
 -- multiplicative-expression:
@@ -275,7 +610,25 @@ pmExpression = undefined
 --  	multiplicative-expression / pm-expression
 --  	multiplicative-expression % pm-expression
 multiplicativeExpression :: P Expression
-multiplicativeExpression = undefined
+multiplicativeExpression = do
+  let mul = binaryOperationExpression (opMul >> pure Multiply)
+                                      multiplicativeExpression
+                                      pmExpression
+  let div = binaryOperationExpression (opDiv >> pure Divide)
+                                      multiplicativeExpression
+                                      pmExpression
+  let rem = binaryOperationExpression (opRem >> pure Remain)
+                                      multiplicativeExpression
+                                      pmExpression
+  choice [pmExpression, try mul, try div, rem] <?> "multiplicative expression"
+
+binaryOperationExpression
+  :: P BinaryOperatorType -> P Expression -> P Expression -> P Expression
+binaryOperationExpression op left right = do
+  pos <- pos
+  l   <- left
+  o   <- BinaryOperator <$> getPosition <*> op
+  BinaryOperationExpression pos o l <$> right
 
 -- expr.add
 -- additive-expression:
@@ -283,7 +636,14 @@ multiplicativeExpression = undefined
 --  	additive-expression + multiplicative-expression
 --  	additive-expression - multiplicative-expression
 additiveExpression :: P Expression
-additiveExpression = undefined
+additiveExpression = do
+  let plus = binaryOperationExpression (opPlus >> pure Plus)
+                                       additiveExpression
+                                       multiplicativeExpression
+  let minus = binaryOperationExpression (opMinus >> pure Minus)
+                                        additiveExpression
+                                        multiplicativeExpression
+  choice [multiplicativeExpression, try plus, minus] <?> "additive expression"
 
 -- expr.shift
 -- shift-expression:
@@ -291,7 +651,14 @@ additiveExpression = undefined
 --  	shift-expression << additive-expression
 --  	shift-expression >> additive-expression
 shiftExpression :: P Expression
-shiftExpression = undefined
+shiftExpression = do
+  let leftSh = binaryOperationExpression (opLeftShift >> pure LeftShift)
+                                         shiftExpression
+                                         additiveExpression
+  let rightSh = binaryOperationExpression (opRightShift >> pure RightShift)
+                                          shiftExpression
+                                          additiveExpression
+  choice [additiveExpression, try leftSh, rightSh] <?> "shift expression"
 
 -- expr.rel
 -- relational-expression:
@@ -301,7 +668,14 @@ shiftExpression = undefined
 --  	relational-expression <= shift-expression
 --  	relational-expression >= shift-expression
 relationalExpression :: P Expression
-relationalExpression = undefined
+relationalExpression = do
+  let rel p = binaryOperationExpression p relationalExpression shiftExpression
+  let less    = rel (opLess >> pure Lesser)
+  let great   = rel (opGreater >> pure Greater)
+  let lessEq  = rel (opLessEq >> pure LesserEqual)
+  let greatEq = rel (opGreaterEq >> pure GreaterEqual)
+  choice [shiftExpression, try less, try great, try lessEq, greatEq]
+    <?> "relational expression"
 
 -- expr.eq
 -- equality-expression:
@@ -309,49 +683,83 @@ relationalExpression = undefined
 --  	equality-expression == relational-expression
 --  	equality-expression != relational-expression
 equalityExpression :: P Expression
-equalityExpression = undefined
+equalityExpression = do
+  let eq = binaryOperationExpression (opEq >> pure Equal)
+                                     equalityExpression
+                                     relationalExpression
+  let notEq = binaryOperationExpression (opNotEq >> pure NotEqual)
+                                        equalityExpression
+                                        relationalExpression
+  choice [relationalExpression, try eq, notEq] <?> "equality expression"
 
 -- expr.bit.and
 -- and-expression:
 --  	equality-expression
 --  	and-expression & equality-expression
 andExpression :: P Expression
-andExpression = undefined
+andExpression = do
+  let bitand = binaryOperationExpression (opAnd >> pure BitAnd)
+                                         andExpression
+                                         equalityExpression
+  choice [equalityExpression, bitand] <?> "bit and expression"
 
 -- expr.xor
 -- exclusive-or-expression:
 --  	and-expression
 --  	exclusive-or-expression ^ and-expression
 exclusiveOrExpression :: P Expression
-exclusiveOrExpression = undefined
+exclusiveOrExpression = do
+  let xor = binaryOperationExpression (opOr >> pure BitXor)
+                                      exclusiveOrExpression
+                                      andExpression
+  choice [andExpression, xor] <?> "xor expression"
 
 -- expr.or
 -- inclusive-or-expression:
 --  	exclusive-or-expression
 --  	inclusive-or-expression | exclusive-or-expression
 inclusiveOrExpression :: P Expression
-inclusiveOrExpression = undefined
+inclusiveOrExpression = do
+  let orExpr = binaryOperationExpression (opOr >> pure BitOr)
+                                         inclusiveOrExpression
+                                         exclusiveOrExpression
+  choice [exclusiveOrExpression, orExpr] <?> "bit or expression"
 
 -- expr.log.and
 -- logical-and-expression:
 --  	inclusive-or-expression
 --  	logical-and-expression && inclusive-or-expression
 logicalAndExpression :: P Expression
-logicalAndExpression = undefined
+logicalAndExpression = do
+  let andExpr = binaryOperationExpression (opLogicalAnd >> pure LogicalAnd)
+                                          logicalAndExpression
+                                          inclusiveOrExpression
+  choice [inclusiveOrExpression, andExpr] <?> "logical and expression"
 
 -- expr.log.or
 -- logical-or-expression:
 --  	logical-and-expression
 --  	logical-or-expression || logical-and-expression
 logicalOrExpression :: P Expression
-logicalOrExpression = undefined
+logicalOrExpression = do
+  let orExpr = binaryOperationExpression (opLogicalOr >> pure LogicalOr)
+                                         logicalOrExpression
+                                         logicalAndExpression
+  choice [logicalAndExpression, orExpr] <?> "logical or expression"
 
 -- expr.cond
 -- conditional-expression:
 --  	logical-or-expression
 --  	logical-or-expression ? expression : assignment-expression
 conditionalExpression :: P Expression
-conditionalExpression = undefined
+conditionalExpression = do
+  let cond =
+        ConditionalExpression
+          <$> pos
+          <*> logicalOrExpression
+          <*> (questionMark >> expression)
+          <*> (colon >> assignmentExpression)
+  choice [logicalOrExpression, cond] <?> "conditional expression"
 
 -- expr.ass
 -- assignment-expression:
@@ -369,9 +777,17 @@ conditionalExpression = undefined
 --  	<<=
 --  	&=
 --  	^=
---  	|=
+---  	|=
 assignmentExpression :: P Expression
-assignmentExpression = undefined
+assignmentExpression = do
+  let assign =
+        AssignmentExpression
+          <$> pos
+          <*> logicalOrExpression
+          <*> assignmentOperator
+          <*> initializerClause
+  choice [conditionalExpression, assign, throwExpression]
+    <?> "assignment expression"
 
 assignmentOperator :: P AssignmentOperator
 assignmentOperator = undefined
@@ -381,13 +797,19 @@ assignmentOperator = undefined
 --  	assignment-expression
 --  	expression , assignment-expression
 expression :: P Expression
-expression = undefined
+expression = do
+  let commaExpr =
+        CommaExpression
+          <$> pos
+          <*> expression
+          <*> (comma >> assignmentExpression)
+  choice [try assignmentExpression, commaExpr] <?> "comma expression"
 
 -- expr.const
 -- constant-expression:
 --  	conditional-expression
 constantExpression :: P Expression
-constantExpression = undefined
+constantExpression = conditionalExpression <?> "constant expression"
 
 -- stmt.stmt
 -- statement:

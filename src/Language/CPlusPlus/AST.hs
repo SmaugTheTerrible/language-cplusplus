@@ -1,7 +1,7 @@
 module Language.CPlusPlus.AST where
 
 import           Language.CPlusPlus.Internal.Base
-import           Text.Parsec hiding (parse)
+import           Text.Parsec             hiding ( parse )
 
 
 newtype TranslationUnit =
@@ -58,6 +58,7 @@ data Expression
       , _simpleTypeCallExpressionArgs :: Maybe ExpressionList
       }
   --  	typename-specifier ( expression-list[opt] )
+
   | TypenameCallExpression
       { _typenameCallExpressionPos      :: SourcePos
       , _typenameCallExpressionTypename :: TypeSpecifier
@@ -112,10 +113,10 @@ data Expression
       , _postDecrementExpressionValue :: Expression
       }
   --  	dynamic_cast < type-id > ( expression )
-  | DinamicCastExpression
-      { _dinamicCastExpressionPos    :: SourcePos
-      , _dinamicCastExpressionType   :: TypeId
-      , _dinamicCastExpressionCasted :: Expression
+  | DynamicCastExpression
+      { _dynamicCastExpressionPos    :: SourcePos
+      , _dynamicCastExpressionType   :: TypeId
+      , _dynamicCastExpressionCasted :: Expression
       }
   --  	static_cast < type-id > ( expression )
   | StaticCastExpression
@@ -139,6 +140,7 @@ data Expression
   --  	typeid ( type-id )
   | TypeIdExpression
       { _typeIdExpressionPos    :: SourcePos
+      , _typeIdExpressionType   :: TypeId
       , _typeIdExpressionCalled :: Either Expression TypeId
       }
   --  	++ cast-expression
@@ -420,6 +422,11 @@ data ExpressionList =
     }
   deriving (Show, Eq)
 
+-- | PseudoDestructorName =
+--     PseudoDestructorNameNested
+--     PseudoDestructorNameTemplate
+--     PseudoDestructorNameTypeName
+--     PseudoDestructorNameDecltype
 data PseudoDestructorName
   --  	::opt nested-name-specifier[opt] type-name :: ~ type-name
   = PseudoDestructorNameNested
@@ -441,7 +448,7 @@ data PseudoDestructorName
   | PseudoDestructorNameTypeName
       { _pseudoDestructorNameTypeNamePos          :: SourcePos
       , _pseudoDestructorNameTypeNameHasSquareDot :: Bool
-      , _pseudoDestructorNameTypeNameNested       :: NestedNameSpecifier
+      , _pseudoDestructorNameTypeNameNested       :: Maybe NestedNameSpecifier
       , _pseudoDestructorNameTypeName             :: TypeName
       }
   --  	~ decltype-specifier     C++0x
@@ -490,7 +497,7 @@ data NewDeclarator
 data NoptrNewDeclarator
   = NoptrNewDeclarator
       { _noptrNewDeclaratorPos        :: SourcePos
-      , _noptrNewDeclaratorExpession  :: Expression
+      , _noptrNewDeclaratorExpression  :: Expression
       , _noptrNewDeclaratorAttributes :: [AttributeSpecifier]
       }
   | NoptrNewDeclaratorPrefixed
@@ -563,13 +570,15 @@ data AssignmentOperatorType
 
 data Statement
   --  	attribute-specifier-seq[opt] identifier : statement
+
   = LabeledStatement
       { _labeledStatementPos        :: SourcePos
-      , _labeledStatementAttrubutes :: [AttributeSpecifier]
+      , _labeledStatementAttributes :: [AttributeSpecifier]
       , _labeledStatementId         :: Identifier
       , _labeledStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] case constant-expression : statement
+
   | LabeledCaseStatement
       { _labeledCaseStatementPos        :: SourcePos
       , _labeledCaseStatementAttributes :: [AttributeSpecifier]
@@ -577,27 +586,34 @@ data Statement
       , _labeledCaseStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] default : statement
+
   | LabeledDefaultStatement
       { _labeledDefaultStatementPos        :: SourcePos
       , _labeledDefaultStatementAttributes :: [AttributeSpecifier]
       , _labeledDefaultStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] expression-statement     C++0x
+
   --  	expression[opt] ;
+
   | ExpressionStatement
       { _expressionStatementPos        :: SourcePos
       , _expressionStatementAttributes :: [AttributeSpecifier]
       , _expressionStatementValue      :: Maybe Expression
       }
   --  	attribute-specifier-seq[opt] compound-statement     C++0x
+
   --  	{ statement-seq[opt] }
+
   | CompoundStatement
       { _compoundStatementPos        :: SourcePos
       , _compoundStatementAttributes :: [AttributeSpecifier]
       , _compoundStatementBlock      :: [Statement]
       }
   --  	attribute-specifier-seq[opt] selection-statement     C++0x
+
   --  	if ( condition ) statement
+
   | IfStatement
       { _ifStatementPos        :: SourcePos
       , _ifStatementAttributes :: [AttributeSpecifier]
@@ -605,6 +621,7 @@ data Statement
       , _ifStatementBlock      :: Statement
       }
   --  	if ( condition ) statement else statement
+
   | IfElseStatement
       { _ifElseStatementPos        :: SourcePos
       , _ifElseStatementAttributes :: [AttributeSpecifier]
@@ -613,6 +630,7 @@ data Statement
       , _ifElseStatementElseBlock  :: Statement
       }
   --  	switch ( condition ) statement
+
   | SwitchStatement
       { _switchStatementPos        :: SourcePos
       , _switchStatementAttributes :: [AttributeSpecifier]
@@ -620,7 +638,9 @@ data Statement
       , _switchStatementBlock      :: Statement
       }
   --  	attribute-specifier-seq[opt] iteration-statement     C++0x
+
   --  	while ( condition ) statement
+
   | WhileStatement
       { _whileStatementPos        :: SourcePos
       , _whileStatementAttributes :: [AttributeSpecifier]
@@ -628,6 +648,7 @@ data Statement
       , _whileStatementBlock      :: Statement
       }
   --  	do statement while ( expression ) ;
+
   | DoWhileStatement
       { _doWhileStatementPos        :: SourcePos
       , _doWhileStatementAttributes :: [AttributeSpecifier]
@@ -635,6 +656,7 @@ data Statement
       , _doWhileStatementExpression :: Expression
       }
   --  	for ( for-init-statement condition[opt] ; expression[opt] ) statement
+
   | ForStatement
       { _forStatementPos        :: SourcePos
       , _forStatementAttributes :: [AttributeSpecifier]
@@ -644,6 +666,7 @@ data Statement
       , _forStatementBlock      :: Statement
       }
   --  	for ( for-range-declaration : for-range-initializer ) statement     C++0x
+
   | ForRangeStatement
       { _forRangeStatementPos         :: SourcePos
       , _forRangeStatementAttributes  :: [AttributeSpecifier]
@@ -652,36 +675,45 @@ data Statement
       , _forRangeStatementBlock       :: Statement
       }
   --  	attribute-specifier-seq[opt] jump-statement     C++0x
+
   --  	break ;
+
   | BreakStatement
       { _breakStatementPos        :: SourcePos
       , _breakStatementAttributes :: [AttributeSpecifier]
       }
   --  	continue ;
+
   | ContinueStatement
       { _continueStatementPos        :: SourcePos
       , _continueStatementAttributes :: [AttributeSpecifier]
       }
   --  	return expression[opt] ;
+
   --  	return braced-init-list[opt] ;     C++0x
+
   | ReturnStatement
       { _returnStatementPos        :: SourcePos
       , _returnStatementAttributes :: [AttributeSpecifier]
       , _returnStatementValue      :: Maybe (Either Expression BracedInitList)
       }
   --  	goto identifier ;
+
   | GotoStatement
       { _gotoStatementPos        :: SourcePos
       , _gotoStatementAttributes :: [AttributeSpecifier]
       , _gotoStatementLabel      :: Identifier
       }
   --  	declaration-statement
+
   | DeclarationStatement
       { _declarationStatementPos   :: SourcePos
       , _declarationStatementValue :: Declaration
       }
   --  	attribute-specifier-seq[opt] try-block
+
   --  	try compound-statement handler-seq
+
   | TryStatement
       { _tryStatementPos        :: SourcePos
       , _tryStatementAttributes :: [AttributeSpecifier]
@@ -692,11 +724,13 @@ data Statement
 
 data Condition
   --  	expression
+
   = ExpressionCondition
       { _expressionConditionPos   :: SourcePos
       , _expressionConditionValue :: Expression
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq declarator = initializer-clause     C++0x
+
   | InitializerCondition
       { _initializerConditionPos            :: SourcePos
       , _initializerConditionAttributes     :: [AttributeSpecifier]
@@ -705,6 +739,7 @@ data Condition
       , _initializerConditionInitializer    :: InitializerClause
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq declarator braced-init-list     C++0x
+
   | InitBracedCondition
       { _initBracedConditionPos            :: SourcePos
       , _initBracedConditionAttributes     :: [AttributeSpecifier]
@@ -739,29 +774,38 @@ data ForRangeInitializer =
 
 data Declaration
   --  	block-declaration
+
   --  	simple-declaration
+
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] init-declarator-list[opt] ;     C++0x
-  = SimpleDeclation
-      { _simpleDeclationPos             :: SourcePos
-      , _simpleDeclationAttributes      :: [AttributeSpecifier]
-      , _simpleDeclationDeclSpecifiers  :: DeclSpecifierSeq
-      , _simpleDeclationInitDeclarators :: [InitDeclarator]
+
+  = SimpleDeclaration
+      { _simpleDeclarationPos             :: SourcePos
+      , _simpleDeclarationAttributes      :: [AttributeSpecifier]
+      , _simpleDeclarationDeclSpecifiers  :: DeclSpecifierSeq
+      , _simpleDeclarationInitDeclarators :: [InitDeclarator]
       }
   --  	asm-definition
+
   --  	asm ( string-literal ) ;
+
   | AsmDefinition
       { _asmDefinitionPos    :: SourcePos
       , _asmDefinitionString :: Literal
       }
   --  	namespace-alias-definition
+
   --  	namespace identifier = qualified-namespace-specifier ;
+
   | NamespaceAliasDefinition
       { _namespaceAliasDefinitionPos       :: SourcePos
       , _namespaceAliasDefinitionId        :: Identifier
       , _namespaceAliasDefinitionSpecifier :: QualifiedNamespaceSpecifier
       }
   --  	using-declaration
+
   --  	using typename[opt] ::opt nested-name-specifier unqualified-id ;
+
   | UsingNestedDeclaration
       { _usingNestedDeclarationPos           :: SourcePos
       , _usingNestedDeclarationTypename      :: Maybe TypeName
@@ -770,12 +814,15 @@ data Declaration
       , _usingNestedDeclarationId            :: UnqualifiedId
       }
   --  	using :: unqualified-id ;
+
   | UsingDeclaration
       { _usingDeclarationPos :: SourcePos
       , _usingDeclarationId  :: Identifier
       }
   --  	using-directive
+
   --  	attribute-specifier-seq[opt] using namespace ::opt nested-name-specifier[opt] namespace-name ;
+
   | UsingDirective
       { _usingDirectivePos           :: SourcePos
       , _usingDirectiveAttributes    :: [AttributeSpecifier]
@@ -784,21 +831,27 @@ data Declaration
       , _usingDirectiveName          :: NamespaceName
       }
   --  	static_assert-declaration     C++0x
+
   --  	static_assert ( constant-expression , string-literal ) ;     C++0x
+
   | StaticAssertDeclaration
       { _staticAssertDeclarationPos        :: SourcePos
       , _staticAssertDeclarationExpression :: Expression
       , _staticAssertDeclarationString     :: Literal
       }
   --  	alias-declaration     C++0x
+
   --  	using identifier = type-id ;     C++0x
+
   | AliasDeclaration
       { _aliasDeclarationPos  :: SourcePos
       , _aliasDeclarationId   :: Identifier
       , _aliasDeclarationType :: TypeId
       }
   --  	opaque-enum-declaration     C++0x
+
   --  	enum-key attribute-specifier-seq[opt] identifier enum-base[opt] ;     C++0x
+
   | OpaqueEnumDeclaration
       { _opaqueEnumDeclarationPos        :: SourcePos
       , _opaqueEnumDeclarationKey        :: EnumKey
@@ -807,7 +860,9 @@ data Declaration
       , _opaqueEnumDeclarationBase       :: Maybe EnumBase
       }
   --  	function-definition
+
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator function-body     C++0x
+
   | FunctionDefinition
       { _functionDefinitionPos            :: SourcePos
       , _functionDefinitionAttributes     :: [AttributeSpecifier]
@@ -816,6 +871,7 @@ data Declaration
       , _functionDefinitionBody           :: FunctionBody
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator = default ;     C++0x
+
   | FunctionDefaultDefinition
       { _functionDefaultDefinitionPos            :: SourcePos
       , _functionDefaultDefinitionAttributes     :: [AttributeSpecifier]
@@ -823,6 +879,7 @@ data Declaration
       , _functionDefaultDefinitionDeclarator     :: Declarator
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator = delete ;     C++0x
+
   | FunctionDeleteDefinition
       { _functionDeleteDefinitionPos            :: SourcePos
       , _functionDeleteDefinitionAttributes     :: [AttributeSpecifier]
@@ -830,44 +887,57 @@ data Declaration
       , _functionDeleteDefinitionDeclarator     :: Declarator
       }
   --  	template-declaration
+
   --  	template < template-parameter-list > declaration     C++0x - The export keyword is reserved for future use
+
   | TemplateDeclaration
       { _templateDeclarationPos        :: SourcePos
       , _templateDeclarationParameters :: [TemplateParameter]
       , _templateDeclarationDeclarator :: Declarator
       }
   --  	explicit-instantiation
+
   --  	extern[opt] template declaration     C++0x
+
   | ExplicitInstantiation
       { _explicitInstantiationPos         :: SourcePos
       , _explicitInstantiationHasExtern   :: Bool
       , _explicitInstantiationDeclaration :: Declaration
       }
   --  	explicit-specialization
+
   --  	template < > declaration
+
   | ExplicitSpecialization
       { _explicitSpecializationPos         :: SourcePos
       , _explicitSpecializationDeclaration :: Declaration
       }
   --  	linkage-specification
+
   --  	extern string-literal { declaration-seq[opt] }
+
   --  	extern string-literal declaration
+
   | LinkageSpecification
       { _linkageSpecificationPos         :: SourcePos
       , _linkageSpecificationString      :: Literal
       , _linkageSpecificationDeclaration :: Either Declaration [Declaration]
       }
   --  	namespace-definition
+
   | NamespaceDefinition
       { _namespaceDefinitionPos :: SourcePos
       , _namespaceDefinitionValue :: Either NamedNamespaceDefinition UnnamedNamespaceDefinition
       }
   --  	empty-declaration     C++0x
+
   | EmptyDeclaration
       { _emptyDeclarationPos :: SourcePos
       }
   --  	attribute-declaration     C++0x
+
   --  	attribute-specifier-seq ;     C++0x
+
   | AttributeDeclaration
       { _attributeDeclarationPos        :: SourcePos
       , _attributeDeclarationAttributes :: [AttributeSpecifier]
@@ -1141,6 +1211,7 @@ data EnumSpecifier =
 
 data EnumHead
   --  	enum-key attribute-specifier-seq[opt] identifier[opt] enum-base[opt]     C++0x
+
   = EnumHead
       { _enumHeadKey        :: SourcePos
       , _enumHeadAttributes :: [AttributeSpecifier]
@@ -1148,6 +1219,7 @@ data EnumHead
       , _enumHeadBase       :: Maybe EnumBase
       }
   --  	enum-key attribute-specifier-seq[opt] nested-name-specifier identifier enum-base[opt]     CD0x
+
   | EnumHeadNested
       { _enumHeadNestedPos        :: SourcePos
       , _enumHeadNestedKey        :: EnumKey
@@ -1330,9 +1402,9 @@ data AttributeArgumentClause =
   deriving (Show, Eq)
 
 data BalancedToken
-  = ParencedTokenSeq
-      { _parencedTokenSeqPos   :: SourcePos
-      , _parencedTokenSeqValue :: [BalancedToken]
+  = ParensedTokenSeq
+      { _parensedTokenSeqPos   :: SourcePos
+      , _parensedTokenSeqValue :: [BalancedToken]
       }
   | SquaredTokenSeq
       { _squaredTokenSeqPos   :: SourcePos
@@ -1345,6 +1417,7 @@ data BalancedToken
   | BalancedToken
       { _balancedTokenPos :: SourcePos
                   --, _balancedTokenValue :: CppToken
+
       }
   deriving (Show, Eq)
 
@@ -1398,9 +1471,9 @@ data NoptrDeclarator
       , _noptrDeclaratorIndex             :: Expression
       , _noptrDeclaratorIndexedAttributes :: [AttributeSpecifier]
       }
-  | NoptrDeclaratorParenced
-      { _noptrDeclaratorParencedPos   :: SourcePos
-      , _noptrDeclaratorParencedValue :: PtrDeclarator
+  | NoptrDeclaratorParensed
+      { _noptrDeclaratorParensedPos   :: SourcePos
+      , _noptrDeclaratorParensedValue :: PtrDeclarator
       }
   deriving (Show, Eq)
 
@@ -1717,33 +1790,39 @@ data MemberSpecification
 
 data MemberDeclaration
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] member-declarator-list[opt] ;     C++0x
+
   = SimpleMemberDeclaration
       { _simpleMemberDeclarationPos            :: SourcePos
       , _simpleMemberDeclarationDeclSpecifiers :: Maybe DeclSpecifierSeq
       , _simpleMemberDeclarationList           :: [MemberDeclarator]
       }
   --  	function-definition ;[opt]
+
   | FunctionMemberDeclaration
       { _functionMemberDeclarationPos                  :: SourcePos
       , _functionMemberDeclarationValue                :: Declaration
       , _functionMemberDeclarationHasTrailingSemicolon :: Bool
       }
   --  	using-declaration
+
   | UsingMemberDeclaration
       { _usingMemberDeclarationPos   :: SourcePos
       , _usingMemberDeclarationValue :: Declaration
       }
   --  	static_assert-declaration     C++0x
+
   | StaticAssertMemberDeclaration
       { _staticAssertMemberDeclarationPos   :: SourcePos
       , _staticAssertMemberDeclarationValue :: Declaration
       }
   --  	template-declaration
+
   | TemplateMemberDeclaration
       { _templateMemberDeclarationPos   :: SourcePos
       , _templateMemberDeclarationValue :: Declaration
       }
   --  	alias-declaration     C++0x
+
   | AliasMemberDeclaration
       { _aliasMemberDeclarationPos   :: SourcePos
       , _aliasMemberDeclarationValue :: Declaration
@@ -1752,6 +1831,7 @@ data MemberDeclaration
 
 data MemberDeclarator
   --  	declarator virt-specifier-seq[opt] pure-specifier[opt]
+
   = MemberDeclarator
       { _memberDeclaratorPos        :: SourcePos
       , _memberDeclaratorValue      :: Declarator
@@ -1759,6 +1839,7 @@ data MemberDeclarator
       , _memberDeclaratorPure       :: Maybe PureSpecifier
       }
   --  	declarator virt-specifier-seq[opt] brace-or-equal-initializer[opt]     C++0x
+
   | InitializedMemberDeclarator
       { _initializedMemberDeclaratorPos         :: SourcePos
       , _initializedMemberDeclaratorValue       :: Declarator
@@ -1766,6 +1847,7 @@ data MemberDeclarator
       , _initializedMemberDeclaratorInitializer :: Maybe BraceOrEqualInitializer
       }
   --  	identifier[opt] attribute-specifier-seq[opt] virt-specifier-seq[opt] : constant-expression
+
   | ExpressionMemberDeclarator
       { _expressionMemberDeclaratorPos        :: SourcePos
       , _expressionMemberDeclaratorId         :: Maybe Identifier
@@ -1811,12 +1893,14 @@ data BaseSpecifierList =
 
 data BaseSpecifier
   --  	attribute-specifier-seq[opt] base-type-specifier     C++0x
+
   = BaseSpecifier
       { _baseSpecifierPos        :: SourcePos
       , _baseSpecifierAttributes :: [AttributeSpecifier]
       , _baseSpecifierValue      :: BaseTypeSpecifier
       }
   --  	attribute-specifier-seq[opt] virtual access-specifier[opt] base-type-specifier     C++0x
+
   | VirtualBaseSpecifier
       { _virtualBaseSpecifierPos             :: SourcePos
       , _virtualBaseSpecifierAttributes      :: [AttributeSpecifier]
@@ -1824,6 +1908,7 @@ data BaseSpecifier
       , _virtualBaseSpecifierValue           :: BaseTypeSpecifier
       }
   --  	attribute-specifier-seq[opt] access-specifier virtual[opt] base-type-specifier     C++0x
+
   | AccessSpecBaseSpecifier
       { _accessSpecBaseSpecifierPos             :: SourcePos
       , _accessSpecBaseSpecifierAttributes      :: [AttributeSpecifier]
@@ -1885,7 +1970,7 @@ data ConversionDeclarator =
   ConversionDeclarator
     { _conversionDeclaratorPos      :: SourcePos
     , _conversionDeclaratorOperator :: PtrOperator
-    , _conversionDeclaratorrest     :: Maybe ConversionDeclarator
+    , _conversionDeclaratorRest     :: Maybe ConversionDeclarator
     }
   deriving (Show, Eq)
 
@@ -2008,30 +2093,35 @@ data TemplateParameter
 
 data TypeParameter
   --  	class ...opt identifier[opt]     C++0x
+
   = ClassParameter
       { _classParameterPos          :: SourcePos
       , _classParameterHasThreeDots :: Bool
       , _classParameterId           :: Maybe Identifier
       }
   --  	class identifier[opt] = type-id
+
   | ClassWithIdParameter
       { _classWithIdParameterPos    :: SourcePos
       , _classWithIdParameterId     :: Maybe Identifier
       , _classWithIdParameterTypeId :: TypeId
       }
   --  	typename ...opt identifier[opt]     C++0x
+
   | TypenameParameter
       { _typenameParameterPos          :: SourcePos
       , _typenameParameterHasThreeDots :: Bool
       , _typenameParameterId           :: Maybe Identifier
       }
   --  	typename identifier[opt] = type-id
+
   | TypenameWithIdParameter
       { _typenameWithIdParameterPos    :: SourcePos
       , _typenameWithIdParameterId     :: Maybe Identifier
       , _typenameWithIdParameterTypeId :: TypeId
       }
   --  	template < template-parameter-list > class ...opt identifier[opt]     C++0x
+
   | TemplateParameter
       { _templateParameterPos          :: SourcePos
       , _templateParameterList         :: [TemplateParameter]
@@ -2039,6 +2129,7 @@ data TypeParameter
       , _templateParameterId           :: Maybe Identifier
       }
   --  	template < template-parameter-list > class identifier[opt] = id-expression
+
   | TemplateWithIdParameter
       { _templateWithIdParameterPos        :: SourcePos
       , _templateWithIdParameterList       :: [TemplateParameter]
