@@ -451,7 +451,6 @@ unaryExpression = do
         SizeOfThreeDottedExpression
           <$> pos
           <*> (kwSizeof >> threeDot >> parens identifier)
-  let align = AlignOfExpression <$> pos <*> (kwAlignof >> parens typeId)
   choice
       [ postfixExpression
       , preIncr
@@ -460,7 +459,7 @@ unaryExpression = do
       , sizeofExpr
       , sizeofType
       , sizeofThreeDot
-      , align
+      , alignmentExpression
       , noexceptExpression
       , newExpression
       , deleteExpression
@@ -480,6 +479,13 @@ unaryOperator =
           , (opTilda >> pure Tilda)
           ]
     <?> "unary operator"
+
+alignmentExpression :: P Expression
+alignmentExpression =
+  AlignOfExpression
+    <$> pos
+    <*> (kwAlignof >> parens typeId)
+    <?> "alignment expression"
 
 -- expr.new
 -- new-expression:
