@@ -118,6 +118,7 @@ tokens :-
     export              { \p _ -> L (pos p) $ KW_Export             }
     extern              { \p _ -> L (pos p) $ KW_Extern             }
     float               { \p _ -> L (pos p) $ KW_Float              }
+    final               { \p _ -> L (pos p) $ KW_Final              }
     for                 { \p _ -> L (pos p) $ KW_For                }
     friend              { \p _ -> L (pos p) $ KW_Friend             }
     goto                { \p _ -> L (pos p) $ KW_Goto               }
@@ -295,6 +296,7 @@ kwExport          = cppToken KW_Export
 kwExtern          = cppToken KW_Extern
 kwFalse           = cppToken KW_False
 kwFloat           = cppToken KW_Float
+kwFinal           = cppToken KW_Final
 kwFor             = cppToken KW_For
 kwFriend          = cppToken KW_Friend
 kwGoto            = cppToken KW_Goto
@@ -434,5 +436,15 @@ userDefinedLiteral  = cppToken' (\t -> case t of
 ident = cppToken' (\t -> case t of
                             Id s -> Just s
                             _    -> Nothing)
+
+bcppToken = cppToken' (\t -> case t of
+                                Punc_LeftBrace    -> Nothing
+                                Punc_RightBrace   -> Nothing
+                                Punc_LeftBracket  -> Nothing
+                                Punc_RightBracket -> Nothing
+                                Punc_LeftParen    -> Nothing
+                                Punc_RightParen   -> Nothing
+                                _                 -> Just t
+                      )
 
 }

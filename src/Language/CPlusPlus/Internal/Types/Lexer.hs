@@ -43,6 +43,7 @@ data Token
     | KW_Export
     | KW_Extern
     | KW_False
+    | KW_Final
     | KW_Float
     | KW_For
     | KW_Friend

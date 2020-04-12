@@ -1,8 +1,8 @@
 module Language.CPlusPlus.AST where
 
-import           Language.CPlusPlus.Internal.Base
-import           Text.Parsec             hiding ( parse )
+import           Text.Parsec                      hiding (parse)
 
+import           Language.CPlusPlus.Internal.Base
 
 newtype TranslationUnit =
   TU [Declaration]
@@ -58,7 +58,6 @@ data Expression
       , _simpleTypeCallExpressionArgs :: Maybe ExpressionList
       }
   --  	typename-specifier ( expression-list[opt] )
-
   | TypenameCallExpression
       { _typenameCallExpressionPos      :: SourcePos
       , _typenameCallExpressionTypename :: TypeSpecifier
@@ -497,7 +496,7 @@ data NewDeclarator
 data NoptrNewDeclarator
   = NoptrNewDeclarator
       { _noptrNewDeclaratorPos        :: SourcePos
-      , _noptrNewDeclaratorExpression  :: Expression
+      , _noptrNewDeclaratorExpression :: Expression
       , _noptrNewDeclaratorAttributes :: [AttributeSpecifier]
       }
   | NoptrNewDeclaratorPrefixed
@@ -676,7 +675,7 @@ data Statement
       , _returnStatementValue      :: Maybe Expression
       }
   --  	return braced-init-list[opt] ;     C++0x
-  | ReturnBracedStatement 
+  | ReturnBracedStatement
       { _returnBracedStatementPos        :: SourcePos
       , _returnBracedStatementAttributes :: [AttributeSpecifier]
       , _returnBracedStatementValue      :: Maybe BracedInitList
@@ -756,7 +755,7 @@ data Declaration
   = SimpleDeclaration
       { _simpleDeclarationPos             :: SourcePos
       , _simpleDeclarationAttributes      :: [AttributeSpecifier]
-      , _simpleDeclarationDeclSpecifiers  :: DeclSpecifierSeq
+      , _simpleDeclarationDeclSpecifiers  :: Maybe DeclSpecifierSeq
       , _simpleDeclarationInitDeclarators :: [InitDeclarator]
       }
   --  	asm-definition
@@ -810,9 +809,7 @@ data Declaration
       , _aliasDeclarationType :: TypeId
       }
   --  	opaque-enum-declaration     C++0x
-
   --  	enum-key attribute-specifier-seq[opt] identifier enum-base[opt] ;     C++0x
-
   | OpaqueEnumDeclaration
       { _opaqueEnumDeclarationPos        :: SourcePos
       , _opaqueEnumDeclarationKey        :: EnumKey
@@ -821,9 +818,7 @@ data Declaration
       , _opaqueEnumDeclarationBase       :: Maybe EnumBase
       }
   --  	function-definition
-
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator function-body     C++0x
-
   | FunctionDefinition
       { _functionDefinitionPos            :: SourcePos
       , _functionDefinitionAttributes     :: [AttributeSpecifier]
@@ -832,7 +827,6 @@ data Declaration
       , _functionDefinitionBody           :: FunctionBody
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator = default ;     C++0x
-
   | FunctionDefaultDefinition
       { _functionDefaultDefinitionPos            :: SourcePos
       , _functionDefaultDefinitionAttributes     :: [AttributeSpecifier]
@@ -840,7 +834,6 @@ data Declaration
       , _functionDefaultDefinitionDeclarator     :: Declarator
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator = delete ;     C++0x
-
   | FunctionDeleteDefinition
       { _functionDeleteDefinitionPos            :: SourcePos
       , _functionDeleteDefinitionAttributes     :: [AttributeSpecifier]
@@ -848,57 +841,44 @@ data Declaration
       , _functionDeleteDefinitionDeclarator     :: Declarator
       }
   --  	template-declaration
-
   --  	template < template-parameter-list > declaration     C++0x - The export keyword is reserved for future use
-
   | TemplateDeclaration
       { _templateDeclarationPos        :: SourcePos
       , _templateDeclarationParameters :: [TemplateParameter]
       , _templateDeclarationDeclarator :: Declarator
       }
   --  	explicit-instantiation
-
   --  	extern[opt] template declaration     C++0x
-
   | ExplicitInstantiation
       { _explicitInstantiationPos         :: SourcePos
       , _explicitInstantiationHasExtern   :: Bool
       , _explicitInstantiationDeclaration :: Declaration
       }
   --  	explicit-specialization
-
   --  	template < > declaration
-
   | ExplicitSpecialization
       { _explicitSpecializationPos         :: SourcePos
       , _explicitSpecializationDeclaration :: Declaration
       }
   --  	linkage-specification
-
   --  	extern string-literal { declaration-seq[opt] }
-
   --  	extern string-literal declaration
-
   | LinkageSpecification
       { _linkageSpecificationPos         :: SourcePos
       , _linkageSpecificationString      :: Literal
       , _linkageSpecificationDeclaration :: Either Declaration [Declaration]
       }
   --  	namespace-definition
-
   | NamespaceDefinition
       { _namespaceDefinitionPos :: SourcePos
       , _namespaceDefinitionValue :: Either NamedNamespaceDefinition UnnamedNamespaceDefinition
       }
   --  	empty-declaration     C++0x
-
   | EmptyDeclaration
       { _emptyDeclarationPos :: SourcePos
       }
   --  	attribute-declaration     C++0x
-
   --  	attribute-specifier-seq ;     C++0x
-
   | AttributeDeclaration
       { _attributeDeclarationPos        :: SourcePos
       , _attributeDeclarationAttributes :: [AttributeSpecifier]
@@ -929,17 +909,12 @@ data DeclSpecifier
       }
   deriving (Show, Eq)
 
-data DeclSpecifierSeq
-  = AttributedDeclSpecifier
-      { _attributedDeclSpecifierPos        :: SourcePos
-      , _attributedDeclSpecifierAttributes :: [AttributeSpecifier]
-      , _attributedDeclSpecifierValue      :: DeclSpecifier
-      }
-  | SimpleDeclSpecifierSeq
-      { _simpleDeclSpecifierSeqPos :: SourcePos
-      , _simpleDeclSpecifier       :: DeclSpecifier
-      , _simpleDeclSpecifierSeq    :: DeclSpecifierSeq
-      }
+data DeclSpecifierSeq =
+  DeclSpecifierSeq
+    { _attributedDeclSpecifierPos        :: SourcePos
+    , _attributedDeclSpecifierValue      :: [DeclSpecifier]
+    , _attributedDeclSpecifierAttributes :: [AttributeSpecifier]
+    }
   deriving (Show, Eq)
 
 data StorageClassSpecifier
@@ -1016,30 +991,20 @@ data TrailingTypeSpecifier
       }
   deriving (Show, Eq)
 
-data TypeSpecifierSeq
-  = TypeSpecifierAttributed
-      { _typeSpecifierAttributedPos   :: SourcePos
-      , _typeSpecifierAttributes      :: [AttributeSpecifier]
-      , _typeSpecifierAttributedValue :: TypeSpecifier
-      }
-  | TypeSpecifierSeq
-      { _typeSpecifierSeqPos :: SourcePos
-      , _typeSpecifierSeq    :: TypeSpecifierSeq
-      , _typeSpecifierValue  :: TypeSpecifier
-      }
+data TypeSpecifierSeq =
+  TypeSpecifierSeq
+    { _typeSpecifierAttributedPos   :: SourcePos
+    , _typeSpecifierAttributedValue :: [TypeSpecifier]
+    , _typeSpecifierAttributes      :: [AttributeSpecifier]
+    }
   deriving (Show, Eq)
 
-data TrailingTypeSpecifierSeq
-  = TrailingTypeSpecifierAttributed
-      { _trailingTypeSpecifierAttributedPos   :: SourcePos
-      , _trailingTypeSpecifierAttributes      :: [AttributeSpecifier]
-      , _trailingTypeSpecifierAttributedValue :: TrailingTypeSpecifier
-      }
-  | TrailingTypeSpecifierSeq
-      { _trailingTypeSpecifierSeqPos :: SourcePos
-      , _trailingTypeSpecifierValue  :: TrailingTypeSpecifier
-      , _trailingTypeSpecifierSeq    :: TrailingTypeSpecifierSeq
-      }
+data TrailingTypeSpecifierSeq =
+  TrailingTypeSpecifierSeq
+    { _trailingTypeSpecifierAttributedPos   :: SourcePos
+    , _trailingTypeSpecifierAttributedValue :: [TrailingTypeSpecifier]
+    , _trailingTypeSpecifierAttributes      :: [AttributeSpecifier]
+    }
   deriving (Show, Eq)
 
 data SimpleTypeSpecifier
@@ -1165,14 +1130,13 @@ data EnumSpecifier =
   EnumSpecifier
     { _enumSpecifierPos         :: SourcePos
     , _enumSpecifierHead        :: EnumHead
-    , _enumSpecifierEnumerators :: [Enumerator]
+    , _enumSpecifierEnumerators :: [EnumeratorDefinition]
     , _enumSpecifierHasDot      :: Bool
     }
   deriving (Show, Eq)
 
 data EnumHead
   --  	enum-key attribute-specifier-seq[opt] identifier[opt] enum-base[opt]     C++0x
-
   = EnumHead
       { _enumHeadKey        :: SourcePos
       , _enumHeadAttributes :: [AttributeSpecifier]
@@ -1180,7 +1144,6 @@ data EnumHead
       , _enumHeadBase       :: Maybe EnumBase
       }
   --  	enum-key attribute-specifier-seq[opt] nested-name-specifier identifier enum-base[opt]     CD0x
-
   | EnumHeadNested
       { _enumHeadNestedPos        :: SourcePos
       , _enumHeadNestedKey        :: EnumKey
@@ -1376,9 +1339,8 @@ data BalancedToken
       , _bracedTokenSeqValue :: [BalancedToken]
       }
   | BalancedToken
-      { _balancedTokenPos :: SourcePos
-                  --, _balancedTokenValue :: CppToken
-
+      { _balancedTokenPos   :: SourcePos
+      , _balancedTokenValue :: BToken
       }
   deriving (Show, Eq)
 
@@ -1566,12 +1528,16 @@ data NoptrAbstractDeclarator
       }
   deriving (Show, Eq)
 
-data ParameterDeclarationClause =
-  ParameterDeclarationClause
-    { _parameterDeclarationClausePos          :: SourcePos
-    , _parameterDeclarationClauseList         :: [ParameterDeclaration]
-    , _parameterDeclarationClauseHasThreeDots :: Bool
-    }
+data ParameterDeclarationClause
+  = ParameterDeclarationClause
+      { _parameterDeclarationClausePos          :: SourcePos
+      , _parameterDeclarationClauseList         :: [ParameterDeclaration]
+      , _parameterDeclarationClauseHasThreeDots :: Bool
+      }
+  | ParameterDeclarationClauseDotted
+      { _parameterDeclarationClauseDottedPos  :: SourcePos
+      , _parameterDeclarationClauseDottedList :: [ParameterDeclaration]
+      }
   deriving (Show, Eq)
 
 data ParameterDeclaration
@@ -1751,39 +1717,33 @@ data MemberSpecification
 
 data MemberDeclaration
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] member-declarator-list[opt] ;     C++0x
-
   = SimpleMemberDeclaration
       { _simpleMemberDeclarationPos            :: SourcePos
       , _simpleMemberDeclarationDeclSpecifiers :: Maybe DeclSpecifierSeq
       , _simpleMemberDeclarationList           :: [MemberDeclarator]
       }
   --  	function-definition ;[opt]
-
   | FunctionMemberDeclaration
       { _functionMemberDeclarationPos                  :: SourcePos
       , _functionMemberDeclarationValue                :: Declaration
       , _functionMemberDeclarationHasTrailingSemicolon :: Bool
       }
   --  	using-declaration
-
   | UsingMemberDeclaration
       { _usingMemberDeclarationPos   :: SourcePos
       , _usingMemberDeclarationValue :: Declaration
       }
   --  	static_assert-declaration     C++0x
-
   | StaticAssertMemberDeclaration
       { _staticAssertMemberDeclarationPos   :: SourcePos
       , _staticAssertMemberDeclarationValue :: Declaration
       }
   --  	template-declaration
-
   | TemplateMemberDeclaration
       { _templateMemberDeclarationPos   :: SourcePos
       , _templateMemberDeclarationValue :: Declaration
       }
   --  	alias-declaration     C++0x
-
   | AliasMemberDeclaration
       { _aliasMemberDeclarationPos   :: SourcePos
       , _aliasMemberDeclarationValue :: Declaration
@@ -1792,7 +1752,6 @@ data MemberDeclaration
 
 data MemberDeclarator
   --  	declarator virt-specifier-seq[opt] pure-specifier[opt]
-
   = MemberDeclarator
       { _memberDeclaratorPos        :: SourcePos
       , _memberDeclaratorValue      :: Declarator
@@ -1800,7 +1759,6 @@ data MemberDeclarator
       , _memberDeclaratorPure       :: Maybe PureSpecifier
       }
   --  	declarator virt-specifier-seq[opt] brace-or-equal-initializer[opt]     C++0x
-
   | InitializedMemberDeclarator
       { _initializedMemberDeclaratorPos         :: SourcePos
       , _initializedMemberDeclaratorValue       :: Declarator
@@ -1808,7 +1766,6 @@ data MemberDeclarator
       , _initializedMemberDeclaratorInitializer :: Maybe BraceOrEqualInitializer
       }
   --  	identifier[opt] attribute-specifier-seq[opt] virt-specifier-seq[opt] : constant-expression
-
   | ExpressionMemberDeclarator
       { _expressionMemberDeclaratorPos        :: SourcePos
       , _expressionMemberDeclaratorId         :: Maybe Identifier
@@ -1854,14 +1811,12 @@ data BaseSpecifierList =
 
 data BaseSpecifier
   --  	attribute-specifier-seq[opt] base-type-specifier     C++0x
-
   = BaseSpecifier
       { _baseSpecifierPos        :: SourcePos
       , _baseSpecifierAttributes :: [AttributeSpecifier]
       , _baseSpecifierValue      :: BaseTypeSpecifier
       }
   --  	attribute-specifier-seq[opt] virtual access-specifier[opt] base-type-specifier     C++0x
-
   | VirtualBaseSpecifier
       { _virtualBaseSpecifierPos             :: SourcePos
       , _virtualBaseSpecifierAttributes      :: [AttributeSpecifier]
@@ -1869,7 +1824,6 @@ data BaseSpecifier
       , _virtualBaseSpecifierValue           :: BaseTypeSpecifier
       }
   --  	attribute-specifier-seq[opt] access-specifier virtual[opt] base-type-specifier     C++0x
-
   | AccessSpecBaseSpecifier
       { _accessSpecBaseSpecifierPos             :: SourcePos
       , _accessSpecBaseSpecifierAttributes      :: [AttributeSpecifier]
@@ -2054,35 +2008,30 @@ data TemplateParameter
 
 data TypeParameter
   --  	class ...opt identifier[opt]     C++0x
-
   = ClassParameter
       { _classParameterPos          :: SourcePos
       , _classParameterHasThreeDots :: Bool
       , _classParameterId           :: Maybe Identifier
       }
   --  	class identifier[opt] = type-id
-
   | ClassWithIdParameter
       { _classWithIdParameterPos    :: SourcePos
       , _classWithIdParameterId     :: Maybe Identifier
       , _classWithIdParameterTypeId :: TypeId
       }
   --  	typename ...opt identifier[opt]     C++0x
-
   | TypenameParameter
       { _typenameParameterPos          :: SourcePos
       , _typenameParameterHasThreeDots :: Bool
       , _typenameParameterId           :: Maybe Identifier
       }
   --  	typename identifier[opt] = type-id
-
   | TypenameWithIdParameter
       { _typenameWithIdParameterPos    :: SourcePos
       , _typenameWithIdParameterId     :: Maybe Identifier
       , _typenameWithIdParameterTypeId :: TypeId
       }
   --  	template < template-parameter-list > class ...opt identifier[opt]     C++0x
-
   | TemplateParameter
       { _templateParameterPos          :: SourcePos
       , _templateParameterList         :: [TemplateParameter]
@@ -2090,7 +2039,6 @@ data TypeParameter
       , _templateParameterId           :: Maybe Identifier
       }
   --  	template < template-parameter-list > class identifier[opt] = id-expression
-
   | TemplateWithIdParameter
       { _templateWithIdParameterPos        :: SourcePos
       , _templateWithIdParameterList       :: [TemplateParameter]

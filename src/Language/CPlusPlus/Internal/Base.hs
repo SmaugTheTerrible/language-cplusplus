@@ -9,6 +9,13 @@ import           Text.Parsec
 
 import           Control.Applicative            ( (<$>) )
 
+data BToken =
+  BToken
+    { _bTokenPos :: SourcePos
+    , _bTokenValue :: Token
+    }
+  deriving (Show, Eq)
+
 data Literal =
   Literal
     { _literalPos   :: SourcePos
@@ -34,6 +41,9 @@ literal = Literal <$> getPosition <*> choice
   , userDefinedLiteral
   ]
 
+stringLiteral' :: P Literal
+stringLiteral' = Literal <$> getPosition <*> stringLiteral <?> "string literal"
+
 identifier :: P Identifier
 identifier = Identifier <$> getPosition <*> Lexer.ident
 
@@ -58,6 +68,9 @@ pointerLiteral = Lexer.pointerLiteral
 userDefinedLiteral :: P InputT
 userDefinedLiteral = Lexer.userDefinedLiteral
 
+bToken :: P BToken
+bToken = BToken <$> pos <*> Lexer.bcppToken
+
 parens :: P a -> P a
 parens = between Lexer.leftParen Lexer.rightParen
 
@@ -70,10 +83,12 @@ brackets = between Lexer.leftBracket Lexer.rightBracket
 angles :: P a -> P a
 angles = between Lexer.opLess Lexer.opGreater
 
--- |Tries apply parser 'p'. Return True if it succeed.
-
+-- | Tries apply parser 'p'. Return True if it succeed.
 optionBool :: P a -> P Bool
 optionBool p = option False (p >> pure True)
 
-pos ::  P SourcePos
-pos = getPosition 
+optionEither :: P a -> P b -> P (Either a b)
+optionEither pa pb = try (Left <$> pa) <|> (Right <$> pb)
+
+pos :: P SourcePos
+pos = getPosition
