@@ -1114,6 +1114,24 @@ declarationStatement =
 --  	namespace-definition
 --  	empty-declaration     C++0x
 --  	attribute-declaration     C++0x
+declarationSeq :: P [Declaration]
+declarationSeq = many1 declaration <?> "declaration seq"
+
+declaration :: P Declaration
+declaration =
+  choice
+      [ blockDeclaration
+      , functionDefinition
+      , templateDeclaration
+      , explicitInstantiation
+      , explicitSpecialization
+      , linkageSpecification
+      , namespaceDefinition
+      , emptyDeclaration
+      , attributeDeclaration
+      ]
+    <?> "declaration"
+
 -- block-declaration:
 --  	simple-declaration
 --  	asm-definition
@@ -1123,39 +1141,84 @@ declarationStatement =
 --  	static_assert-declaration     C++0x
 --  	alias-declaration     C++0x
 --  	opaque-enum-declaration     C++0x
+blockDeclaration :: P Declaration
+blockDeclaration =
+  choice
+      [ simpleDeclaration
+      , asmDefinition
+      , namespaceAliasDefinition
+      , usingDeclaration
+      , usingDirective
+      , staticAssertDeclaration
+      , aliasDeclaration
+      , opaqueEnumDeclaration
+      ]
+    <?> "block declaration"
+
 -- alias-declaration:
 --  	using identifier = type-id ;     C++0x
 -- simple-declaration:
 --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] init-declarator-list[opt] ;     C++0x
+aliasDeclaration :: P Declaration
+aliasDeclaration =
+  do
+      pos <- pos
+      kwUsing
+      i <- identifier
+      opAssign
+      t <- typeId
+      semi
+      pure $ AliasDeclaration pos i t
+    <?> "alias declaration"
+
+simpleDeclaration :: P Declaration
+simpleDeclaration =
+  do
+      pos <- pos
+      as  <- option [] attributeSpecifierSeq
+      ds  <- optionMaybe declSpecifierSeq
+      is  <- option [] initDeclaratorList
+      semi
+      pure $ SimpleDeclaration pos as ds is
+    <?> "simple declaration"
+
 -- static_assert-declaration:
 --  	static_assert ( constant-expression , string-literal ) ;     C++0x
 -- empty-declaration:
 --  	;     C++0x
 -- attribute-declaration:
 --  	attribute-specifier-seq ;     C++0x
-declarationSeq :: P [Declaration]
-declarationSeq = undefined
-
-declaration :: P Declaration
-declaration = undefined
-
-blockDeclaration :: P Declaration
-blockDeclaration = undefined
-
-aliasDeclaration :: P Declaration
-aliasDeclaration = undefined
-
-simpleDeclaration :: P Declaration
-simpleDeclaration = undefined
-
 staticAssertDeclaration :: P Declaration
-staticAssertDeclaration = undefined
+staticAssertDeclaration =
+  do
+      pos <- pos
+      kwStaticAssert
+      leftParen
+      e <- constantExpression
+      comma
+      s <- stringLiteral'
+      rightParen
+      semi
+      pure $ StaticAssertDeclaration pos e s
+    <?> "static assert declaration"
 
 emptyDeclaration :: P Declaration
-emptyDeclaration = undefined
+emptyDeclaration =
+  do
+      pos <- pos
+      semi
+      pure $ EmptyDeclaration pos
+    <?> "empty declaration"
+
 
 attributeDeclaration :: P Declaration
-attributeDeclaration = undefined
+attributeDeclaration =
+  do
+      pos <- pos
+      as  <- attributeSpecifierSeq
+      semi
+      pure $ AttributeDeclaration pos as
+    <?> "attribute declaration"
 
 -- dcl.spec
 -- decl-specifier:
@@ -1169,10 +1232,24 @@ attributeDeclaration = undefined
 --  	decl-specifier attribute-specifier-seq[opt]     C++0x
 --  	decl-specifier decl-specifier-seq     C++0x
 declSpecifier :: P DeclSpecifier
-declSpecifier = undefined
+declSpecifier =
+  do
+      let storage = StorageDeclSpecifier <$> pos <*> storageClassSpecifier
+      let typeS     = undefined
+      let funcS     = undefined
+      let friend    = undefined
+      let typedef   = undefined
+      let constexpr = undefined
+      choice [storage, typeS, funcS, friend, typedef, constexpr]
+    <?> "decl specifier"
 
 declSpecifierSeq :: P DeclSpecifierSeq
-declSpecifierSeq = undefined
+declSpecifierSeq =
+  DeclSpecifierSeq
+    <$> pos
+    <*> many1 declSpecifier
+    <*> option [] attributeSpecifierSeq
+    <?> "decl specifier seq"
 
 -- dcl.stc
 -- storage-class-specifier:
@@ -1183,7 +1260,15 @@ declSpecifierSeq = undefined
 --  	extern
 --  	mutable
 storageClassSpecifier :: P StorageClassSpecifier
-storageClassSpecifier = undefined
+storageClassSpecifier = do
+  let auto        = undefined
+  let register    = undefined
+  let static_     = undefined
+  let threadLocal = undefined
+  let extern      = undefined
+  let mutable     = undefined
+  choice [auto, register, static_, threadLocal, extern, mutable]
+    <?> "storage class specifier"
 
 -- dcl.fct.spec
 -- function-specifier:
@@ -1191,7 +1276,11 @@ storageClassSpecifier = undefined
 --  	virtual
 --  	explicit
 functionSpecifier :: P FunctionSpecifier
-functionSpecifier = undefined
+functionSpecifier = do
+  let inline   = undefined
+  let virtual  = undefined
+  let explicit = undefined
+  choice [inline, virtual, explicit] <?> "function specifier"
 
 -- dcl.typedef
 -- typedef-name:
@@ -1216,16 +1305,33 @@ typedefName = undefined
 --  	trailing-type-specifier attribute-specifier-seq[opt]     C++0x
 --  	trailing-type-specifier trailing-type-specifier-seq     C++0x
 typeSpecifier :: P TypeSpecifier
-typeSpecifier = undefined
+typeSpecifier = do
+  let trailing = undefined
+  let class_   = undefined
+  let enum     = undefined
+  choice [trailing, class_, enum] <?> "type specifier"
 
 trailingTypeSpecifier :: P TrailingTypeSpecifier
-trailingTypeSpecifier = undefined
+trailingTypeSpecifier = do
+  let simple   = undefined
+  let elab     = undefined
+  let typename = undefined
+  let cv       = undefined
+  choice [simple, elab, typename, cv] <?> "trailing type specifier"
 
 typeSpecifierSeq :: P TypeSpecifierSeq
-typeSpecifierSeq = undefined
+typeSpecifierSeq = do
+  pos <- pos
+  ts  <- many1 typeSpecifier
+  as  <- option [] attributeSpecifierSeq
+  pure $ TypeSpecifierSeq pos ts as
 
 trailingTypeSpecifierSeq :: P TrailingTypeSpecifierSeq
-trailingTypeSpecifierSeq = undefined
+trailingTypeSpecifierSeq = do
+  pos <- pos
+  ts  <- many1 trailingTypeSpecifier
+  as  <- option [] attributeSpecifierSeq
+  pure $ TrailingTypeSpecifierSeq pos ts as
 
 -- dct.type.simple
 -- simple-type-specifier:
@@ -1246,6 +1352,46 @@ trailingTypeSpecifierSeq = undefined
 --  	void
 --  	auto     C++0x
 --  	decltype-specifier     C++0x
+simpleTypeSpecifier :: P SimpleTypeSpecifier
+simpleTypeSpecifier = do
+  let typeName = undefined
+  let template = undefined
+  let char     = undefined
+  let char16   = undefined
+  let char32   = undefined
+  let wchar    = undefined
+  let bool     = undefined
+  let short    = undefined
+  let int      = undefined
+  let long     = undefined
+  let signed   = undefined
+  let unsigned = undefined
+  let float    = undefined
+  let double   = undefined
+  let void     = undefined
+  let auto     = undefined
+  let decltype = undefined
+  choice
+      [ typeName
+      , template
+      , char
+      , char16
+      , char32
+      , wchar
+      , bool
+      , short
+      , int
+      , long
+      , signed
+      , unsigned
+      , float
+      , double
+      , void
+      , auto
+      , decltype
+      ]
+    <?> "simple type specifier"
+
 -- type-name:
 --  	class-name
 --  	enum-name
@@ -1253,14 +1399,20 @@ trailingTypeSpecifierSeq = undefined
 --  	simple-template-id     C++0x
 -- decltype-specifier:
 --  	decltype ( expression )     C++0x
-simpleTypeSpecifier :: P SimpleTypeSpecifier
-simpleTypeSpecifier = undefined
-
 typeName :: P TypeName
-typeName = undefined
+typeName = do
+  let class_   = undefined
+  let enum     = undefined
+  let typedef  = undefined
+  let template = undefined
+  choice [class_, enum, typedef, template] <?> "type name"
 
 decltypeSpecifier :: P DecltypeSpecifier
-decltypeSpecifier = undefined
+decltypeSpecifier = do
+  pos <- pos
+  kwDecltype
+  e <- parens expression
+  pure $ DecltypeSpecifier pos e
 
 -- dcl.type.elab
 -- elaborated-type-specifier:
@@ -1268,7 +1420,11 @@ decltypeSpecifier = undefined
 --  	class-key ::opt nested-name-specifier[opt] template[opt] simple-template-id
 --  	enum ::opt nested-name-specifier[opt] identifier
 elaboratedTypeSpecifier :: P ElaboratedTypeSpecifier
-elaboratedTypeSpecifier = undefined
+elaboratedTypeSpecifier = do
+  let id       = undefined
+  let template = undefined
+  let enum     = undefined
+  choice [id, template, enum] <?> "elaborated type specifier"
 
 -- dcl.enum
 -- enum-name:
@@ -1296,31 +1452,55 @@ elaboratedTypeSpecifier = undefined
 -- enumerator:
 --  	identifier
 enumName :: P EnumName
-enumName = undefined
+enumName = EnumName <$> pos <*> identifier <?> "enum name"
 
 enumSpecifier :: P EnumSpecifier
-enumSpecifier = undefined
+enumSpecifier =
+  EnumSpecifier <$> pos <*> enumHead <*> enumeratorList <*> optionBool comma
 
 enumHead :: P EnumHead
-enumHead = undefined
+enumHead = do
+  let simple = undefined
+  let nested = undefined
+  try simple <|> nested <?> "enum head"
 
 opaqueEnumDeclaration :: P Declaration
-opaqueEnumDeclaration = undefined
+opaqueEnumDeclaration =
+  OpaqueEnumDeclaration
+    <$> pos
+    <*> enumKey
+    <*> option [] attributeSpecifierSeq
+    <*> identifier
+    <*> do
+          e <- optionMaybe enumBase
+          semi
+          pure e
+    <?> "opaque enum declaration"
 
 enumKey :: P EnumKey
-enumKey = undefined
+enumKey =
+  EnumKey
+    <$> pos
+    <*> (   try (kwEnum >> kwStruct >> pure EnumStruct)
+        <|> try (kwEnum >> kwClass >> pure EnumClass)
+        <|> (kwEnum >> pure Enum)
+        )
+    <?> "enum key"
 
 enumBase :: P EnumBase
-enumBase = undefined
+enumBase = EnumBase <$> pos <*> (colon >> typeSpecifierSeq) <?> "enum base"
 
 enumeratorList :: P [EnumeratorDefinition]
-enumeratorList = undefined
+enumeratorList = sepBy1 enumeratorDefinition comma <?> "enumerator list"
 
 enumeratorDefinition :: P EnumeratorDefinition
-enumeratorDefinition = undefined
+enumeratorDefinition = do
+  let simple   = undefined
+  let assigned = undefined
+  try simple <|> assigned <?> "enumerator definition"
 
 enumerator :: P Enumerator
-enumerator = undefined
+enumerator = Enumerator <$> pos <*> identifier
 
 -- namespace.def
 -- namespace-name:
@@ -1334,6 +1514,31 @@ enumerator = undefined
 -- named-namespace-definition:
 --  	original-namespace-definition
 --  	extension-namespace-definition
+namespaceName :: P NamespaceName
+namespaceName =
+  NamespaceName
+    <$> pos
+    <*> optionEither originalNamespaceName namespaceAlias
+    <?> "namespace name"
+
+originalNamespaceName :: P OriginalNamespaceName
+originalNamespaceName =
+  OriginalNamespaceName <$> pos <*> identifier <?> "original namespace name"
+
+namespaceDefinition :: P Declaration
+namespaceDefinition =
+  NamespaceDefinition
+    <$> pos
+    <*> optionEither namedNamespaceDefinition unnamedNamespaceDefinition
+    <?> "namespace definition"
+
+namedNamespaceDefinition :: P NamedNamespaceDefinition
+namedNamespaceDefinition =
+  NamedNamespaceDefinition
+    <$> pos
+    <*> optionEither originalNamespaceDefinition extensionNamespaceDefinition
+    <?> "named namespace definition"
+
 -- original-namespace-definition:
 --  	inline[opt] namespace identifier { namespace-body }     C++0x
 -- extension-namespace-definition:
@@ -1342,29 +1547,34 @@ enumerator = undefined
 --  	inline[opt] namespace { namespace-body }
 -- namespace-body:
 --  	declaration-seq[opt]
-namespaceName :: P NamespaceName
-namespaceName = undefined
-
-originalNamespaceName :: P OriginalNamespaceName
-originalNamespaceName = undefined
-
-namespaceDefinition :: P Declaration
-namespaceDefinition = undefined
-
-namedNamespaceDefinition :: P NamedNamespaceDefinition
-namedNamespaceDefinition = undefined
-
 originalNamespaceDefinition :: P OriginalNamespaceDefinition
-originalNamespaceDefinition = undefined
+originalNamespaceDefinition =
+  OriginalNamespaceDefinition
+    <$> pos
+    <*> optionBool kwInline
+    <*> (kwNamespace >> identifier)
+    <*> braces namespaceBody
+    <?> "original namespace definition"
 
 extensionNamespaceDefinition :: P ExtensionNamespaceDefinition
-extensionNamespaceDefinition = undefined
+extensionNamespaceDefinition =
+  ExtensionNamespaceDefinition
+    <$> pos
+    <*> optionBool kwInline
+    <*> (kwNamespace >> originalNamespaceName)
+    <*> braces namespaceBody
+    <?> "extention namespace definition"
 
 unnamedNamespaceDefinition :: P UnnamedNamespaceDefinition
-unnamedNamespaceDefinition = undefined
+unnamedNamespaceDefinition =
+  UnnamedNamespaceDefinition
+    <$> pos
+    <*> optionBool kwInline
+    <*> (kwNamespace >> braces namespaceBody)
+    <?> "unnamed namespaces definition"
 
 namespaceBody :: P [Declaration]
-namespaceBody = undefined
+namespaceBody = option [] declarationSeq <?> "namespace body"
 
 -- namespace.alias
 -- namespace-alias:
@@ -1374,13 +1584,28 @@ namespaceBody = undefined
 -- qualified-namespace-specifier:
 --  	::opt nested-name-specifier[opt] namespace-name
 namespaceAlias :: P NamespaceAlias
-namespaceAlias = undefined
+namespaceAlias = NamespaceAlias <$> pos <*> identifier <?> "namespace alias"
 
 namespaceAliasDefinition :: P Declaration
-namespaceAliasDefinition = undefined
+namespaceAliasDefinition =
+  NamespaceAliasDefinition
+    <$> pos
+    <*> (kwNamespace >> identifier)
+    <*> do
+          opAssign
+          q <- qualifiedNamespaceSpecifier
+          semi
+          pure q
+    <?> "namespace alias definition"
 
 qualifiedNamespaceSpecifier :: P QualifiedNamespaceSpecifier
-qualifiedNamespaceSpecifier = undefined
+qualifiedNamespaceSpecifier =
+  QualifiedNamespaceSpecifier
+    <$> pos
+    <*> optionBool doubleColon
+    <*> optionMaybe nestedNameSpecifier
+    <*> namespaceName
+    <?> "qualified namespace specifier"
 
 -- namespace.udecl
 -- using-declaration:
@@ -1393,20 +1618,36 @@ usingDeclaration = undefined
 -- using-directive:
 --  	attribute-specifier-seq[opt] using namespace ::opt nested-name-specifier[opt] namespace-name ;
 usingDirective :: P Declaration
-usingDirective = undefined
+usingDirective =
+  UsingDirective
+    <$> pos
+    <*> option [] attributeSpecifierSeq
+    <*> (kwUsing >> kwNamespace >> optionBool doubleColon)
+    <*> optionMaybe nestedNameSpecifier
+    <*> do
+          n <- namespaceName
+          semi
+          pure n
+    <?> "using directive"
 
 -- dcl.asm
 -- asm-definition:
 --  	asm ( string-literal ) ;
 asmDefinition :: P Declaration
-asmDefinition = undefined
+asmDefinition =
+  AsmDefinition <$> pos <*> parens stringLiteral' <?> "asm definition"
 
 -- dcl.link
 -- linkage-specification:
 --  	extern string-literal { declaration-seq[opt] }
 --  	extern string-literal declaration
 linkageSpecification :: P Declaration
-linkageSpecification = undefined
+linkageSpecification =
+  LinkageSpecification
+    <$> pos
+    <*> (kwExtern >> stringLiteral')
+    <*> optionEither declaration (braces declarationSeq)
+    <?> "linkage specification"
 
 -- dcl.attr.grammar
 -- attribute-specifier-seq:
@@ -1415,9 +1656,35 @@ linkageSpecification = undefined
 -- attribute-specifier:
 --  	[ [ attribute-list ] ]     C++0x
 --  	alignment-specifier     C++0x
+attributeSpecifierSeq :: P [AttributeSpecifier]
+attributeSpecifierSeq = many1 attributeSpecifier <?> "attribute specifier seq"
+
+attributeSpecifier :: P AttributeSpecifier
+attributeSpecifier = do
+  let attr = do
+        pos <- pos
+        ls  <- braces $ braces attributeList
+        pure $ AttributeSpecifier pos ls
+  let align = AlignmentAttribute <$> pos <*> alignmentSpecifier
+  attr <|> align <?> "attribute specifier"
+
 -- alignment-specifier:
 --  	alignas ( type-id ...opt )     C++0x
 --  	alignas ( alignment-expression ...opt )     C++0x
+alignmentSpecifier :: P AlignmentSpecifier
+alignmentSpecifier = do
+  let
+    p = do
+      pos <- getPosition
+      kwAlignas
+      parens
+        $   (AlignAsType pos <$> typeId <*> optionBool threeDot)
+        <|> (   AlignAsExpression pos
+            <$> alignmentExpression
+            <*> optionBool threeDot
+            )
+  p <?> "alignment specifier"
+
 -- attribute-list:
 --  	attribute[opt]     C++0x
 --  	attribute-list , attribute[opt]     C++0x
@@ -1434,6 +1701,48 @@ linkageSpecification = undefined
 --  	identifier     C++0x
 -- attribute-argument-clause:
 --  	( balanced-token-seq )     C++0x
+attributeList :: P AttributeList
+attributeList =
+  AttributeList
+    <$> pos
+    <*> (attribute `sepBy` comma)
+    <*> optionBool threeDot
+    <?> "attribute list"
+
+attribute :: P Attribute
+attribute =
+  Attribute
+    <$> pos
+    <*> attributeToken
+    <*> optionMaybe attributeArgumentClause
+    <?> "attribute"
+
+attributeToken :: P AttributeToken
+attributeToken =
+  AttributeToken
+    <$> pos
+    <*> optionEither identifier attributeScopedToken
+    <?> "attribute token"
+
+attributeScopedToken :: P AttributeScopedToken
+attributeScopedToken =
+  AttributeScopedToken
+    <$> pos
+    <*> attributeNamespace
+    <*> (doubleColon >> identifier)
+    <?> "attribute scoped token"
+
+attributeNamespace :: P AttributeNamespace
+attributeNamespace =
+  AttributeNamespace <$> pos <*> identifier <?> "attribute namespace"
+
+attributeArgumentClause :: P AttributeArgumentClause
+attributeArgumentClause =
+  AttributeArgumentClause
+    <$> pos
+    <*> balancedTokenSeq
+    <?> "attribute argument clause"
+
 -- balanced-token-seq:
 --  	balanced-token     C++0x
 --  	balanced-token-seq balanced-token     C++0x
@@ -1442,38 +1751,11 @@ linkageSpecification = undefined
 --  	[ balanced-token-seq ]     C++0x
 --  	{ balanced-token-seq }     C++0x
 --  	token     C++0x - except a parenthesis, a bracket, or a brace
-attributeSpecifierSeq :: P [AttributeSpecifier]
-attributeSpecifierSeq = undefined
-
-attributeSpecifier :: P AttributeSpecifier
-attributeSpecifier = undefined
-
-alignmentSpecifier :: P AlignmentSpecifier
-alignmentSpecifier = undefined
-
-attributeList :: P AttributeList
-attributeList = undefined
-
-attribute :: P Attribute
-attribute = undefined
-
-attributeToken :: P AttributeToken
-attributeToken = undefined
-
-attributeScopedToken :: P AttributeScopedToken
-attributeScopedToken = undefined
-
-attributeNamespace :: P AttributeNamespace
-attributeNamespace = undefined
-
-attributeArgumentClause :: P AttributeArgumentClause
-attributeArgumentClause = undefined
-
 balancedTokenSeq :: P [BalancedToken]
-balancedTokenSeq = undefined
+balancedTokenSeq = many1 balancedToken
 
 balancedToken :: P BalancedToken
-balancedToken = undefined
+balancedToken = BalancedToken <$> pos <*> bToken <?> "balanced token"
 
 -- dcl.decl
 -- init-declarator-list:
@@ -1492,6 +1774,37 @@ balancedToken = undefined
 --  	noptr-declarator parameters-and-qualifiers     C++0x
 --  	noptr-declarator [ constant-expression[opt] ] attribute-specifier-seq[opt]     C++0x
 --  	( ptr-declarator )     C++0x
+initDeclaratorList :: P [InitDeclarator]
+initDeclaratorList = initDeclarator `sepBy1` comma <?> "init declarator list"
+
+initDeclarator :: P InitDeclarator
+initDeclarator =
+  InitDeclarator
+    <$> pos
+    <*> declarator
+    <*> optionMaybe initializer
+    <?> "init declarator"
+
+declarator :: P Declarator
+declarator = do
+  let ptr   = undefined
+  let noptr = undefined
+  ptr <|> noptr <?> "declarator"
+
+ptrDeclarator :: P PtrDeclarator
+ptrDeclarator = do
+  let ptr   = undefined
+  let noptr = undefined
+  ptr <|> noptr <?> "ptr declarator"
+
+noptrDeclarator :: P NoptrDeclarator
+noptrDeclarator = do
+  let noptr      = undefined
+  let parametred = undefined
+  let indexed    = undefined
+  let parensed   = undefined
+  choice [noptr, parametred, indexed, parensed] <?> "noptr declarator"
+
 -- parameters-and-qualifiers:
 --  	( parameter-declaration-clause ) attribute-specifier-seq[opt] cv-qualifier-seq[opt] ref-qualifier[opt] exception-specification[opt]     C++0x
 -- trailing-return-type:
@@ -1510,44 +1823,54 @@ balancedToken = undefined
 -- ref-qualifier:
 --  	&     C++0x
 --  	&&     C++0x
+parametersAndQualifiers :: P ParametersAndQualifiers
+parametersAndQualifiers =
+  ParametersAndQualifiers
+    <$> pos
+    <*> parens parameterDeclarationClause
+    <*> option [] attributeSpecifierSeq
+    <*> option [] cvQualifierSeq
+    <*> optionMaybe refQualifier
+    <*> optionMaybe exceptionSpecification
+    <?> "parameters and qualifiers"
+
+trailingReturnType :: P TrailingReturnType
+trailingReturnType =
+  TrailingReturnType
+    <$> pos
+    <*> (opArrow >> trailingTypeSpecifierSeq)
+    <*> optionMaybe abstractDeclarator
+    <?> "trailing return type"
+
+ptrOperator :: P PtrOperator
+ptrOperator = do
+  let star  = undefined
+  let ref   = undefined
+  let dref  = undefined
+  let nstar = undefined
+  choice [star, ref, dref, nstar] <?> "ptr operator"
+
+cvQualifierSeq :: P [CvQualifier]
+cvQualifierSeq = many1 cvQualifier <?> "cv qualifier seq"
+
+cvQualifier :: P CvQualifier
+cvQualifier =
+  (ConstQualifier <$> pos) <|> (VolatileQualifier <$> pos) <?> "cv qualifier"
+
+refQualifier :: P RefQualifier
+refQualifier = do
+  let ref  = undefined
+  let dref = undefined
+  ref <|> dref <?> "ref qualifier"
+
 -- declarator-id:
 --  	...opt id-expression     C++0x
 --  	::opt nested-name-specifier[opt] class-name     C++0x
-initDeclaratorList :: P [InitDeclarator]
-initDeclaratorList = undefined
-
-initDeclarator :: P InitDeclarator
-initDeclarator = undefined
-
-declarator :: P Declarator
-declarator = undefined
-
-ptrDeclarator :: P PtrDeclarator
-ptrDeclarator = undefined
-
-noptrDeclarator :: P NoptrDeclarator
-noptrDeclarator = undefined
-
-parametersAndQualifiers :: P ParametersAndQualifiers
-parametersAndQualifiers = undefined
-
-trailingReturnType :: P TrailingReturnType
-trailingReturnType = undefined
-
-ptrOperator :: P PtrOperator
-ptrOperator = undefined
-
-cvQualifierSeq :: P [CvQualifier]
-cvQualifierSeq = undefined
-
-cvQualifier :: P CvQualifier
-cvQualifier = undefined
-
-refQualifier :: P RefQualifier
-refQualifier = undefined
-
 declaratorId :: P DeclaratorId
-declaratorId = undefined
+declaratorId = do
+  let id = undefined
+  let cl = undefined
+  id <|> cl <?> "declarator id"
 
 -- dcl.name
 -- type-id:
@@ -1564,16 +1887,32 @@ declaratorId = undefined
 --  	noptr-abstract-declarator[opt] [ constant-expression ] attribute-specifier-seq[opt]     C++0x
 --  	( ptr-abstract-declarator )     C++0x
 typeId :: P TypeId
-typeId = undefined
+typeId =
+  TypeId
+    <$> pos
+    <*> typeSpecifierSeq
+    <*> optionMaybe abstractDeclarator
+    <?> "type id"
 
 abstractDeclarator :: P AbstractDeclarator
-abstractDeclarator = undefined
+abstractDeclarator = do
+  let ptr   = undefined
+  let noptr = undefined
+  let dots  = undefined
+  ptr <|> noptr <|> dots <?> "abstract declarator"
 
 ptrAbstractDeclarator :: P PtrAbstractDeclarator
-ptrAbstractDeclarator = undefined
+ptrAbstractDeclarator = do
+  let ptr   = undefined
+  let noptr = undefined
+  ptr <|> noptr <?> "ptr abstract declarator"
 
 noptrAbstractDeclarator :: P NoptrAbstractDeclarator
-noptrAbstractDeclarator = undefined
+noptrAbstractDeclarator = do
+  let noptr    = undefined
+  let array    = undefined
+  let parensed = undefined
+  choice [noptr, array, parensed] <?> "noptr abstract declarator"
 
 -- dcl.fct
 -- parameter-declaration-clause:
@@ -1588,13 +1927,22 @@ noptrAbstractDeclarator = undefined
 --  	attribute-specifier-seq[opt] decl-specifier-seq abstract-declarator[opt]     C++0x
 --  	attribute-specifier-seq[opt] decl-specifier-seq abstract-declarator[opt] = initializer-clause     C++0x
 parameterDeclarationClause :: P ParameterDeclarationClause
-parameterDeclarationClause = undefined
+parameterDeclarationClause = do
+  let simple = undefined
+  let dotted = undefined
+  try simple <|> dotted <?> "parameter declaration list"
 
 parameterDeclarationList :: P [ParameterDeclaration]
-parameterDeclarationList = undefined
+parameterDeclarationList =
+  parameterDeclaration `sepBy1` comma <?> "parameter declaration list"
 
 parameterDeclaration :: P ParameterDeclaration
-parameterDeclaration = undefined
+parameterDeclaration = do
+  let param     = undefined
+  let inited    = undefined
+  let abstract  = undefined
+  let absInited = undefined
+  choice [param, inited, abstract, absInited] <?> "parameter declaration"
 
 -- dcl.fct.def.general
 -- function-definition:
@@ -1605,10 +1953,17 @@ parameterDeclaration = undefined
 --  	ctor-initializer[opt] compound-statement     C++0x
 --  	function-try-block     C++0x
 functionDefinition :: P Declaration
-functionDefinition = undefined
+functionDefinition = do
+  let simple   = undefined
+  let default' = undefined
+  let delete   = undefined
+  choice [simple, default', delete] <?> "function definition"
 
 functionBody :: P FunctionBody
-functionBody = undefined
+functionBody = do
+  let ctor     = undefined
+  let tryBlock = undefined
+  try ctor <|> tryBlock <?> "Function body"
 
 -- dcl.init
 -- initializer:
@@ -1627,19 +1982,36 @@ functionBody = undefined
 --  	{ initializer-list ,opt }     C++0x
 --  	{ }     C++0x
 initializer :: P Initializer
-initializer = undefined
+initializer = do
+  let init = undefined
+  let bore = undefined
+  init <|> bore <?> "initializer"
 
 braceOrEqualInitializer :: P BraceOrEqualInitializer
-braceOrEqualInitializer = undefined
+braceOrEqualInitializer = do
+  let equal  = undefined
+  let braced = undefined
+  equal <|> braced <?> "brace or equal initializer"
 
 initializerClause :: P InitializerClause
-initializerClause = undefined
+initializerClause = do
+  let expr = undefined
+  let list = undefined
+  expr <|> list <?> "initializer clause"
 
 initializerList :: P InitializerList
-initializerList = undefined
+initializerList =
+  InitializerList
+    <$> pos
+    <*> (initializerClause `sepBy1` comma)
+    <*> optionBool threeDot
+    <?> "initializer list"
 
 bracedInitList :: P BracedInitList
-bracedInitList = undefined
+bracedInitList = do
+  let list  = undefined
+  let empty = undefined
+  try list <|> empty <?> "braced init list"
 
 -- class
 -- class-name:
