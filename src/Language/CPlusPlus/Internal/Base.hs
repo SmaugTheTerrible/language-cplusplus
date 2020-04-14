@@ -1,7 +1,7 @@
 module Language.CPlusPlus.Internal.Base where
 
-import qualified Language.CPlusPlus.Internal.Lexer
-                                               as Lexer
+import           Language.CPlusPlus.Internal.Lexer
+                                         hiding ( pos )
 
 import           Language.CPlusPlus.Internal.Types.Lexer
 
@@ -45,43 +45,46 @@ stringLiteral' :: P Literal
 stringLiteral' = Literal <$> getPosition <*> stringLiteral <?> "string literal"
 
 identifier :: P Identifier
-identifier = Identifier <$> getPosition <*> Lexer.ident
+identifier = Identifier <$> getPosition <*> ident
 
 integerLiteral :: P InputT
-integerLiteral = Lexer.integerLiteral
+integerLiteral = intLiteral
 
 characterLiteral :: P InputT
-characterLiteral = Lexer.characterLiteral
+characterLiteral = charLiteral
 
 floatingLiteral :: P InputT
-floatingLiteral = Lexer.floatingLiteral
+floatingLiteral = flLiteral
 
 stringLiteral :: P InputT
-stringLiteral = Lexer.stringLiteral
+stringLiteral = strLiteral
 
 booleanLiteral :: P InputT
-booleanLiteral = Lexer.booleanLiteral
+booleanLiteral = boolLiteral
 
 pointerLiteral :: P InputT
-pointerLiteral = Lexer.pointerLiteral
+pointerLiteral = ptrLiteral
 
 userDefinedLiteral :: P InputT
-userDefinedLiteral = Lexer.userDefinedLiteral
+userDefinedLiteral = uDefLiteral
 
 bToken :: P BToken
-bToken = BToken <$> pos <*> Lexer.bcppToken
+bToken = BToken <$> pos <*> bcppToken
+
+lexemeFinal = lexeme "final"
+lexemeOverride = lexeme "override"
 
 parens :: P a -> P a
-parens = between Lexer.leftParen Lexer.rightParen
+parens = between leftParen rightParen
 
 braces :: P a -> P a
-braces = between Lexer.leftBrace Lexer.rightBrace
+braces = between leftBrace rightBrace
 
 brackets :: P a -> P a
-brackets = between Lexer.leftBracket Lexer.rightBracket
+brackets = between leftBracket rightBracket
 
 angles :: P a -> P a
-angles = between Lexer.opLess Lexer.opGreater
+angles = between opLess opGreater
 
 -- | Tries apply parser 'p'. Return True if it succeed.
 optionBool :: P a -> P Bool

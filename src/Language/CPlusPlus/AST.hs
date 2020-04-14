@@ -696,8 +696,8 @@ data Statement
   | TryStatement
       { _tryStatementPos        :: SourcePos
       , _tryStatementAttributes :: [AttributeSpecifier]
-      , _tryStatementBlock      :: Statement
-      , _tryStatementHandlers   :: [Handler]
+      , _tryStatementBlock      :: TryBlock
+      --, _tryStatementHandlers   :: [Handler]
       }
   deriving (Show, Eq)
 
@@ -845,7 +845,7 @@ data Declaration
   | TemplateDeclaration
       { _templateDeclarationPos        :: SourcePos
       , _templateDeclarationParameters :: [TemplateParameter]
-      , _templateDeclarationDeclarator :: Declarator
+      , _templateDeclarationDeclarator :: Declaration
       }
   --  	explicit-instantiation
   --  	extern[opt] template declaration     C++0x
@@ -2113,7 +2113,7 @@ data TypenameSpecifier
 data TryBlock =
   TryBlock
     { _tryBlockPos      :: SourcePos
-    , _tryAttributes    :: [AttributeSpecifier]
+--    , _tryAttributes    :: [AttributeSpecifier]
     , _tryBlockCompound :: Statement
     , _tryBlockHandlers :: [Handler]
     }
@@ -2155,7 +2155,7 @@ data ExceptionDeclaration
   deriving (Show, Eq)
 
 data ExceptionSpecification =
-  ExceptionSpecificationDynamic
+  ExceptionSpecification
     { _exceptionSpecificationPos :: SourcePos
     , _exceptionSpecificationValue :: Either DynamicExceptionSpecification NoexceptSpecification
     }

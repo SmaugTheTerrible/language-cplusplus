@@ -2035,25 +2035,53 @@ bracedInitList = do
 --  	struct
 --  	union
 className :: P ClassName
-className = undefined
+className = do
+  let simple   = undefined
+  let template = undefined
+  simple <|> template <?> "class name"
 
 classSpecifier :: P ClassSpecifier
-classSpecifier = undefined
+classSpecifier =
+  ClassSpecifier
+    <$> pos
+    <*> classHead
+    <*> braces (optionMaybe memberSpecification)
+    <?> "class specifier"
 
 classHead :: P ClassHead
-classHead = undefined
+classHead = do
+  let simple = undefined
+  let opaque = undefined
+  try simple <|> opaque <?> "class head"
 
 classHeadName :: P ClassHeadName
-classHeadName = undefined
+classHeadName =
+  ClassHeadName
+    <$> pos
+    <*> optionMaybe nestedNameSpecifier
+    <*> className
+    <?> "class head name"
 
 classVirtSpecifierSeq :: P [ClassVirtSpecifier]
-classVirtSpecifierSeq = undefined
+classVirtSpecifierSeq = many1 classVirtSpecifier
 
 classVirtSpecifier :: P ClassVirtSpecifier
-classVirtSpecifier = undefined
+classVirtSpecifier =
+  ClassVirtSpecifier
+    <$> pos
+    <*> ((kwExplicit >> pure ClassExplicit) <|> (lexemeFinal >> pure ClassFinal)
+        )
+    <?> "class virt specifier"
 
 classKey :: P ClassKey
-classKey = undefined
+classKey =
+  ClassKey
+    <$> pos
+    <*> (   (kwClass >> pure Class)
+        <|> (kwStruct >> pure Struct)
+        <|> (kwUnion >> pure Union)
+        )
+    <?> "class key"
 
 -- class.mem
 -- member-specification:
@@ -2083,25 +2111,51 @@ classKey = undefined
 -- pure-specifier:
 --  	= 0
 memberSpecification :: P MemberSpecification
-memberSpecification = undefined
+memberSpecification = do
+  let member = undefined
+  let access = undefined
+  member <|> access <?> "member specification"
 
 memberDeclaration :: P MemberDeclaration
-memberDeclaration = undefined
+memberDeclaration = do
+  let decList  = undefined
+  let func     = undefined
+  let using    = undefined
+  let stAssert = undefined
+  let template = undefined
+  let alias    = undefined
+  choice [decList, func, using, stAssert, template, alias]
+    <?> "member declaration"
 
 memberDeclaratorList :: P [MemberDeclarator]
-memberDeclaratorList = undefined
+memberDeclaratorList = memberDeclarator `sepBy1` comma
 
 memberDeclarator :: P MemberDeclarator
-memberDeclarator = undefined
+memberDeclarator = do
+  let pure    = undefined
+  let braced  = undefined
+  let coloned = undefined
+  choice [pure, braced, coloned] <?> "member declarator"
 
 virtSpecifierSeq :: P [VirtSpecifier]
-virtSpecifierSeq = undefined
+virtSpecifierSeq = many1 virtSpecifier
 
 virtSpecifier :: P VirtSpecifier
-virtSpecifier = undefined
+virtSpecifier =
+  VirtSpecifier
+    <$> pos
+    <*> (   (lexemeOverride >> pure MemberOverride)
+        <|> (lexemeFinal >> pure MemberFinal)
+        <|> (kwNew >> pure MemberNew)
+        )
+    <?> "virt specifier"
 
 pureSpecifier :: P PureSpecifier
-pureSpecifier = undefined
+pureSpecifier = do
+  pos <- pos
+  opAssign
+  i <- integerLiteral
+  if i == "0" then pure $ PureSpecifier pos else unexpected "integer literal"
 
 -- class.derived
 -- base-clause:
@@ -2123,22 +2177,43 @@ pureSpecifier = undefined
 --  	protected
 --  	public
 baseClause :: P BaseClause
-baseClause = undefined
+baseClause =
+  BaseClause <$> pos <*> (colon >> baseSpecifierList) <?> "base clause"
 
 baseSpecifierList :: P BaseSpecifierList
-baseSpecifierList = undefined
+baseSpecifierList =
+  BaseSpecifierList
+    <$> pos
+    <*> (baseSpecifier `sepBy1` comma)
+    <*> optionBool threeDot
+    <?> "base specifier list"
 
 baseSpecifier :: P BaseSpecifier
-baseSpecifier = undefined
+baseSpecifier = do
+  let emptyAccess = undefined
+  let virtFirst   = undefined
+  let accessFirst = undefined
+  choice [emptyAccess, virtFirst, accessFirst] <?> "base specifier"
 
 classOrDecltype :: P ClassOrDecltype
-classOrDecltype = undefined
+classOrDecltype = do
+  let _class   = undefined
+  let decltype = undefined
+  _class <|> decltype <?> "class or decltype"
 
 baseTypeSpecifier :: P BaseTypeSpecifier
-baseTypeSpecifier = undefined
+baseTypeSpecifier =
+  BaseTypeSpecifier <$> pos <*> classOrDecltype <?> "base type specifier"
 
 accessSpecifier :: P AccessSpecifier
-accessSpecifier = undefined
+accessSpecifier =
+  AccessSpecifier
+    <$> pos
+    <*> (   (kwPublic >> pure Public)
+        <|> (kwProtected >> pure Protected)
+        <|> (kwPrivate >> pure Private)
+        )
+    <?> "access specifier"
 
 -- class.conv.fct
 -- conversion-function-id:
@@ -2148,13 +2223,27 @@ accessSpecifier = undefined
 -- conversion-declarator:
 --  	ptr-operator conversion-declarator[opt]
 conversionFunctionId :: P ConversionFunctionId
-conversionFunctionId = undefined
+conversionFunctionId =
+  ConversionFunctionId
+    <$> pos
+    <*> (kwOperator >> conversionTypeId)
+    <?> "conversion function id"
 
 conversionTypeId :: P ConversionTypeId
-conversionTypeId = undefined
+conversionTypeId =
+  ConversionTypeId
+    <$> pos
+    <*> typeSpecifierSeq
+    <*> optionMaybe conversionDeclarator
+    <?> "conversion type id"
 
 conversionDeclarator :: P ConversionDeclarator
-conversionDeclarator = undefined
+conversionDeclarator =
+  ConversionDeclarator
+    <$> pos
+    <*> ptrOperator
+    <*> optionMaybe conversionDeclarator
+    <?> "conversion declarator"
 
 -- class.base.init
 -- ctor-initializer:
@@ -2169,16 +2258,31 @@ conversionDeclarator = undefined
 --  	class-or-decltype
 --  	identifier
 ctorInitializer :: P CtorInitializer
-ctorInitializer = undefined
+ctorInitializer =
+  CtorInitializer
+    <$> pos
+    <*> (colon >> memInitializerList)
+    <?> "ctor initializer"
 
 memInitializerList :: P MemInitializerList
-memInitializerList = undefined
+memInitializerList = do
+  pos  <- pos
+  ms   <- memInitializer `sepBy1` comma
+  dots <- optionBool threeDot
+  pure $ MemInitializerList pos ms dots
 
 memInitializer :: P MemInitializer
-memInitializer = undefined
+memInitializer = do
+  let parensed = undefined
+  let braced   = undefined
+  try parensed <|> braced <?> "mem initializer"
 
 memInitializerId :: P MemInitializerId
-memInitializerId = undefined
+memInitializerId =
+  MemInitializerId
+    <$> pos
+    <*> optionEither classOrDecltype identifier
+    <?> "mem initializer id"
 
 -- over.oper
 -- operator-function-id:	See C++ Standard Core Language Issue n. 189
@@ -2196,7 +2300,7 @@ memInitializerId = undefined
 --  	%
 --  	^
 --  	&
---  	|
+---  	|
 --  	~
 --  	!
 --  	=
@@ -2209,7 +2313,7 @@ memInitializerId = undefined
 --  	%=
 --  	^=
 --  	&=
---  	|=
+---  	|=
 --  	<<
 --  	>>
 --  	>>=
@@ -2219,7 +2323,7 @@ memInitializerId = undefined
 --  	<=
 --  	>=
 --  	&&
---  	||
+---  	||
 --  	++
 --  	--
 --  	,
@@ -2228,28 +2332,48 @@ memInitializerId = undefined
 --  	()
 --  	[]
 operatorFunctionId :: P OperatorFunctionId
-operatorFunctionId = undefined
+operatorFunctionId = do
+  let simple   = undefined
+  let template = undefined
+  try simple <|> template <?> "operator function id"
 
 overloadableOperator :: P OverloadableOperator
-overloadableOperator = undefined
+overloadableOperator =
+  OverloadableOperator
+    <$> pos
+    <*> overloadableOperatorType
+    <?> "overlodable operator"
+  where overloadableOperatorType = undefined
 
 -- over.literal
 -- literal-operator-id:
 --  	operator "" identifier     C++0x
 literalOperatorId :: P LiteralOperatorId
-literalOperatorId = undefined
+literalOperatorId = do
+  pos <- pos
+  kwOperator
+  str <- stringLiteral'
+  let Literal p s = str
+  if s == ""
+    then LiteralOperatorId pos <$> identifier
+    else unexpected $ "string literal on " ++ show p
 
 -- temp
 -- template-declaration:
---  	template < template-parameter-list > declaration     C++0x - The export keyword is reserved for future use
+--  	template < template-parameter-list > declaration     
 -- template-parameter-list:
 --  	template-parameter
 --  	template-parameter-list , template-parameter
 templateDeclaration :: P Declaration
-templateDeclaration = undefined
+templateDeclaration =
+  TemplateDeclaration
+    <$> pos
+    <*> (kwTemplate >> angles templateParameterList)
+    <*> declaration
+    <?> "template declarator"
 
 templateParameterList :: P [TemplateParameter]
-templateParameterList = undefined
+templateParameterList = templateParameter `sepBy1` comma
 
 -- temp.param
 -- template-parameter:
@@ -2263,10 +2387,28 @@ templateParameterList = undefined
 --  	template < template-parameter-list > class ...opt identifier[opt]     C++0x
 --  	template < template-parameter-list > class identifier[opt] = id-expression
 templateParameter :: P TemplateParameter
-templateParameter = undefined
+templateParameter = do
+  let typeP = undefined
+  let param = undefined
+  typeP <|> param <?> "template parameter"
 
 typeParameter :: P TypeParameter
-typeParameter = undefined
+typeParameter = do
+  let classSimple      = undefined
+  let classAssigned    = undefined
+  let typeSimple       = undefined
+  let typeAssigned     = undefined
+  let templateSimple   = undefined
+  let templateAssigned = undefined
+  choice
+      [ try classSimple
+      , classAssigned
+      , try typeSimple
+      , typeAssigned
+      , try templateSimple
+      , templateAssigned
+      ]
+    <?> "type parameter"
 
 -- temp.names
 -- simple-template-id:
@@ -2285,38 +2427,68 @@ typeParameter = undefined
 --  	type-id     C++0x
 --  	id-expression     C++0x
 simpleTemplateId :: P SimpleTemplateId
-simpleTemplateId = undefined
+simpleTemplateId =
+  SimpleTemplateId
+    <$> pos
+    <*> templateName
+    <*> angles (optionMaybe templateArgumentList)
+    <?> "simple template id"
 
 templateId :: P TemplateId
-templateId = undefined
+templateId = do
+  let simple   = undefined
+  let operator = undefined
+  let literal  = undefined
+  simple <|> operator <|> literal <?> "template id"
 
 templateName :: P TemplateName
-templateName = undefined
+templateName = TemplateName <$> pos <*> identifier <?> "template name"
 
 templateArgumentList :: P TemplateArgumentList
-templateArgumentList = undefined
+templateArgumentList =
+  TemplateArgumentList
+    <$> pos
+    <*> (templateArgument `sepBy1` comma)
+    <*> optionBool threeDot
+    <?> "template argument list"
 
 templateArgument :: P TemplateArgument
-templateArgument = undefined
+templateArgument = do
+  let constExpr = undefined
+  let tId       = undefined
+  let idExpr    = undefined
+  constExpr <|> tId <|> idExpr <?> "template argument"
 
 -- temp.res
 -- typename-specifier:
 --  	typename ::opt nested-name-specifier identifier     C++0x
 --  	typename ::opt nested-name-specifier template[opt] simple-template-id     C++0x
 typenameSpecifier :: P TypenameSpecifier
-typenameSpecifier = undefined
+typenameSpecifier = do
+  let id       = undefined
+  let template = undefined
+  try id <|> template <?> "typename specifier"
 
 -- temp.explicit
 -- explicit-instantiation:
 --  	extern[opt] template declaration     C++0x
 explicitInstantiation :: P Declaration
-explicitInstantiation = undefined
+explicitInstantiation =
+  ExplicitInstantiation
+    <$> pos
+    <*> optionBool kwExtern
+    <*> (kwTemplate >> declaration)
+    <?> "explicit instantiation"
 
 -- temp.expl.spec
 -- explicit-specialization:
 --  	template < > declaration
 explicitSpecialization :: P Declaration
-explicitSpecialization = undefined
+explicitSpecialization =
+  ExplicitSpecialization
+    <$> pos
+    <*> (kwTemplate >> opLess >> opGreater >> declaration)
+    <?> "explicit specialization"
 
 -- except
 -- try-block:
@@ -2335,22 +2507,43 @@ explicitSpecialization = undefined
 -- throw-expression:
 --  	throw assignment-expression[opt]
 tryBlock :: P TryBlock
-tryBlock = undefined
+tryBlock = do
+  pos <- pos
+  kwTry
+  st <- compoundStatement
+  TryBlock pos st <$> handlerSeq <?> "try block"
 
 functionTryBlock :: P FunctionTryBlock
-functionTryBlock = undefined
+functionTryBlock = do
+  pos <- pos
+  kwTry
+  ctor <- optionMaybe ctorInitializer
+  st   <- compoundStatement
+  FunctionTryBlock pos ctor st <$> handlerSeq <?> "function try block"
 
 handlerSeq :: P [Handler]
-handlerSeq = undefined
+handlerSeq = many1 handler
 
 handler :: P Handler
-handler = undefined
+handler = do
+  pos <- pos
+  kwCatch
+  ex <- parens exceptionDeclaration
+  Handler pos ex <$> compoundStatement <?> "handler"
 
 exceptionDeclaration :: P ExceptionDeclaration
-exceptionDeclaration = undefined
+exceptionDeclaration = do
+  let decl    = undefined
+  let absDecl = undefined
+  let dots    = undefined
+  try decl <|> absDecl <|> dots <?> "exception declaration"
 
 throwExpression :: P Expression
-throwExpression = undefined
+throwExpression =
+  ThrowExpression
+    <$> pos
+    <*> (kwThrow >> optionMaybe assignmentExpression)
+    <?> "throw expression"
 
 -- except.spec
 -- exception-specification:
@@ -2365,13 +2558,30 @@ throwExpression = undefined
 --  	noexcept ( constant-expression )     C++0x
 --  	noexcept     C++0x
 exceptionSpecification :: P ExceptionSpecification
-exceptionSpecification = undefined
+exceptionSpecification =
+  ExceptionSpecification
+    <$> pos
+    <*> optionEither dynamicExceptionSpecification noexceptSpecification
+    <?> "exception specification"
 
 dynamicExceptionSpecification :: P DynamicExceptionSpecification
-dynamicExceptionSpecification = undefined
+dynamicExceptionSpecification = do
+  pos <- pos
+  kwThrow
+  DynamicExceptionSpecification pos
+    <$> parens (optionMaybe typeIdList)
+    <?> "dynamic exception specification"
 
 typeIdList :: P TypeIdList
-typeIdList = undefined
+typeIdList =
+  TypeIdList
+    <$> pos
+    <*> (typeId `sepBy1` comma)
+    <*> optionBool threeDot
+    <?> "type id list"
 
 noexceptSpecification :: P NoexceptSpecification
-noexceptSpecification = undefined
+noexceptSpecification = do
+  let expr   = undefined
+  let noexpr = undefined
+  try expr <|> noexpr <?> "noexcept specification"

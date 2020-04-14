@@ -118,7 +118,7 @@ tokens :-
     export              { \p _ -> L (pos p) $ KW_Export             }
     extern              { \p _ -> L (pos p) $ KW_Extern             }
     float               { \p _ -> L (pos p) $ KW_Float              }
-    final               { \p _ -> L (pos p) $ KW_Final              }
+--    final               { \p _ -> L (pos p) $ KW_Final              }
     for                 { \p _ -> L (pos p) $ KW_For                }
     friend              { \p _ -> L (pos p) $ KW_Friend             }
     goto                { \p _ -> L (pos p) $ KW_Goto               }
@@ -296,7 +296,7 @@ kwExport          = cppToken KW_Export
 kwExtern          = cppToken KW_Extern
 kwFalse           = cppToken KW_False
 kwFloat           = cppToken KW_Float
-kwFinal           = cppToken KW_Final
+--kwFinal           = cppToken KW_Final
 kwFor             = cppToken KW_For
 kwFriend          = cppToken KW_Friend
 kwGoto            = cppToken KW_Goto
@@ -411,31 +411,33 @@ ppPragma            = cppToken PP_Pragma
 
 eol                 = cppToken EOL
 
-integerLiteral      = cppToken' (\t -> case t of
+intLiteral      = cppToken' (\t -> case t of
                                         Literal_Integer s     -> Just s
                                         _                     -> Nothing)
-characterLiteral    = cppToken' (\t -> case t of
+charLiteral    = cppToken' (\t -> case t of
                                         Literal_Char s        -> Just s
                                         _                     -> Nothing)
-floatingLiteral     = cppToken' (\t -> case t of
+flLiteral     = cppToken' (\t -> case t of
                                         Literal_Float s       -> Just s
                                         _                     -> Nothing)
-stringLiteral       = cppToken' (\t -> case t of
+strLiteral       = cppToken' (\t -> case t of
                                         Literal_String s      -> Just s
                                         _                     -> Nothing)
-booleanLiteral      = cppToken' (\t -> case t of
+boolLiteral      = cppToken' (\t -> case t of
                                         Literal_Boolean s     -> Just s
                                         _                     -> Nothing)
-pointerLiteral      = cppToken' (\t -> case t of
+ptrLiteral      = cppToken' (\t -> case t of
                                         Literal_NullPtr s     -> Just s
                                         _                     -> Nothing)
-userDefinedLiteral  = cppToken' (\t -> case t of
+uDefLiteral  = cppToken' (\t -> case t of
                                         Literal_UserDefined s -> Just s
                                         _                     -> Nothing)
 
 ident = cppToken' (\t -> case t of
                             Id s -> Just s
                             _    -> Nothing)
+
+lexeme s = cppToken $ Id s
 
 bcppToken = cppToken' (\t -> case t of
                                 Punc_LeftBrace    -> Nothing
