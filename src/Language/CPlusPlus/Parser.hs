@@ -6,6 +6,8 @@ import           Language.CPlusPlus.Internal.Lexer
                                          hiding ( pos )
 import           Language.CPlusPlus.Internal.Types.Lexer
 
+import           Data.Functor                   ( ($>) )
+
 import           Text.Parsec             hiding ( parse )
 
 -- https://www.nongnu.org/hcb/
@@ -211,9 +213,12 @@ captureList =
 
 capture :: P Capture
 capture = do
-  let idCapture   = undefined
-  let refCapture  = undefined
-  let thisCapture = undefined
+  let idCapture  = CaptureIdentifier <$> pos <*> identifier
+  let refCapture = CaptureRef <$> pos <*> (opAnd >> identifier)
+  let thisCapture = do
+        pos <- pos
+        kwThis
+        pure $ CaptureThis pos
   choice [idCapture, refCapture, thisCapture] <?> "capture"
 
 lambdaDeclarator :: P LambdaDeclarator
@@ -863,9 +868,17 @@ statement =
       , iterationStatement
       , jumpStatement
       , declarationStatement
---  , tryStatement
+      , tryStatement
       ]
     <?> "statement"
+
+tryStatement :: P Statement
+tryStatement =
+  TryStatement
+    <$> pos
+    <*> option [] attributeSpecifierSeq
+    <*> tryBlock
+    <?> "try statement"
 
 -- stmt.label
 -- labeled-statement:
@@ -1235,11 +1248,20 @@ declSpecifier :: P DeclSpecifier
 declSpecifier =
   do
       let storage = StorageDeclSpecifier <$> pos <*> storageClassSpecifier
-      let typeS     = undefined
-      let funcS     = undefined
-      let friend    = undefined
-      let typedef   = undefined
-      let constexpr = undefined
+      let typeS   = TypeDeclSpecifier <$> pos <*> typeSpecifier
+      let funcS   = FunctionDeclSpecifier <$> pos <*> functionSpecifier
+      let friend = do
+            pos <- pos
+            kwFriend
+            pure $ FriendDeclSpecifier pos
+      let typedef = do
+            pos <- pos
+            kwTypedef
+            pure $ TypedefDeclSpecifier pos
+      let constexpr = do
+            pos <- pos
+            kwConstexpr
+            pure $ ConstexprDeclSpecifier pos
       choice [storage, typeS, funcS, friend, typedef, constexpr]
     <?> "decl specifier"
 
@@ -1261,12 +1283,30 @@ declSpecifierSeq =
 --  	mutable
 storageClassSpecifier :: P StorageClassSpecifier
 storageClassSpecifier = do
-  let auto        = undefined
-  let register    = undefined
-  let static_     = undefined
-  let threadLocal = undefined
-  let extern      = undefined
-  let mutable     = undefined
+  let auto = do
+        pos <- pos
+        kwAuto
+        pure $ AutoSpecifier pos
+  let register = do
+        pos <- pos
+        kwRegister
+        pure $ RegisterSpecifier pos
+  let static_ = do
+        pos <- pos
+        kwStatic
+        pure $ StaticSpecifier pos
+  let threadLocal = do
+        pos <- pos
+        kwThreadLocal
+        pure $ ThreadLocalSpecifier pos
+  let extern = do
+        pos <- pos
+        kwExtern
+        pure $ ExternSpecifier pos
+  let mutable = do
+        pos <- pos
+        kwMutable
+        pure $ MutableSpecifier pos
   choice [auto, register, static_, threadLocal, extern, mutable]
     <?> "storage class specifier"
 
@@ -1277,16 +1317,17 @@ storageClassSpecifier = do
 --  	explicit
 functionSpecifier :: P FunctionSpecifier
 functionSpecifier = do
-  let inline   = undefined
-  let virtual  = undefined
-  let explicit = undefined
+  pos <- getPosition
+  let inline   = kwInline >> pure (InlineSpecifier pos)
+  let virtual  = kwVirtual >> pure (VirtualSpecifier pos)
+  let explicit = kwExplicit >> pure (ExplicitSpecifier pos)
   choice [inline, virtual, explicit] <?> "function specifier"
 
 -- dcl.typedef
 -- typedef-name:
 --  	identifier
 typedefName :: P TypedefName
-typedefName = undefined
+typedefName = TypedefName <$> pos <*> identifier <?> "typedef name"
 
 -- dcl.type
 -- type-specifier:
@@ -1306,17 +1347,18 @@ typedefName = undefined
 --  	trailing-type-specifier trailing-type-specifier-seq     C++0x
 typeSpecifier :: P TypeSpecifier
 typeSpecifier = do
-  let trailing = undefined
-  let class_   = undefined
-  let enum     = undefined
+  let trailing = TypeSpecifierTrailing <$> pos <*> trailingTypeSpecifier
+  let class_   = TypeSpecifierClass <$> pos <*> classSpecifier
+  let enum     = TypeSpecifierEnum <$> pos <*> enumSpecifier
   choice [trailing, class_, enum] <?> "type specifier"
 
 trailingTypeSpecifier :: P TrailingTypeSpecifier
 trailingTypeSpecifier = do
-  let simple   = undefined
-  let elab     = undefined
-  let typename = undefined
-  let cv       = undefined
+  let simple = TrailingTypeSpecifierSimple <$> pos <*> simpleTypeSpecifier
+  let elab =
+        TrailingTypeSpecifierElaborated <$> pos <*> elaboratedTypeSpecifier
+  let typename = TrailingTypeSpecifierTypename <$> pos <*> typenameSpecifier
+  let cv       = TrailingTypeSpecifierCV <$> pos <*> cvQualifier
   choice [simple, elab, typename, cv] <?> "trailing type specifier"
 
 typeSpecifierSeq :: P TypeSpecifierSeq
@@ -1354,25 +1396,77 @@ trailingTypeSpecifierSeq = do
 --  	decltype-specifier     C++0x
 simpleTypeSpecifier :: P SimpleTypeSpecifier
 simpleTypeSpecifier = do
-  let typeName = undefined
-  let template = undefined
-  let char     = undefined
-  let char16   = undefined
-  let char32   = undefined
-  let wchar    = undefined
-  let bool     = undefined
-  let short    = undefined
-  let int      = undefined
-  let long     = undefined
-  let signed   = undefined
-  let unsigned = undefined
-  let float    = undefined
-  let double   = undefined
-  let void     = undefined
-  let auto     = undefined
-  let decltype = undefined
+  let typeName' =
+        SimpleTypeSpecifier
+          <$> pos
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> typeName
+  let template =
+        SimpleTypeSpecifierTemplate
+          <$> pos
+          <*> optionBool doubleColon
+          <*> nestedNameSpecifier
+          <*> (kwTemplate >> simpleTemplateId)
+  let char = do
+        pos <- pos
+        kwChar
+        pure $ SimpleTypeSpecifierChar pos
+  let char16 = do
+        pos <- pos
+        kwChar16T
+        pure $ SimpleTypeSpecifierChar16T pos
+  let char32 = do
+        pos <- pos
+        kwChar32T
+        pure $ SimpleTypeSpecifierChar32T pos
+  let wchar = do
+        pos <- pos
+        kwWCharT
+        pure $ SimpleTypeSpecifierWcharT pos
+  let bool = do
+        pos <- pos
+        kwBool
+        pure $ SimpleTypeSpecifierBool pos
+  let short = do
+        pos <- pos
+        kwShort
+        pure $ SimpleTypeSpecifierShort pos
+  let int = do
+        pos <- pos
+        kwInt
+        pure $ SimpleTypeSpecifierInt pos
+  let long = do
+        pos <- pos
+        kwLong
+        pure $ SimpleTypeSpecifierLong pos
+  let signed = do
+        pos <- pos
+        kwSigned
+        pure $ SimpleTypeSpecifierSigned pos
+  let unsigned = do
+        pos <- pos
+        kwUnsigned
+        pure $ SimpleTypeSpecifierUnsigned pos
+  let float = do
+        pos <- pos
+        kwFloat
+        pure $ SimpleTypeSpecifierFloat pos
+  let double = do
+        pos <- pos
+        kwDouble
+        pure $ SimpleTypeSpecifierDouble pos
+  let void = do
+        pos <- pos
+        kwVoid
+        pure $ SimpleTypeSpecifierVoid pos
+  let auto = do
+        pos <- pos
+        kwAuto
+        pure $ SimpleTypeSpecifierAuto pos
+  let decltype = SimpleTypeSpecifierDecltype <$> pos <*> decltypeSpecifier
   choice
-      [ typeName
+      [ typeName'
       , template
       , char
       , char16
@@ -1401,10 +1495,10 @@ simpleTypeSpecifier = do
 --  	decltype ( expression )     C++0x
 typeName :: P TypeName
 typeName = do
-  let class_   = undefined
-  let enum     = undefined
-  let typedef  = undefined
-  let template = undefined
+  let class_   = TypeNameClass <$> pos <*> className
+  let enum     = TypeNameEnum <$> pos <*> enumName
+  let typedef  = TypeNameTypedef <$> pos <*> typedefName
+  let template = TypeNameTemplate <$> pos <*> simpleTemplateId
   choice [class_, enum, typedef, template] <?> "type name"
 
 decltypeSpecifier :: P DecltypeSpecifier
@@ -1421,9 +1515,28 @@ decltypeSpecifier = do
 --  	enum ::opt nested-name-specifier[opt] identifier
 elaboratedTypeSpecifier :: P ElaboratedTypeSpecifier
 elaboratedTypeSpecifier = do
-  let id       = undefined
-  let template = undefined
-  let enum     = undefined
+  let id =
+        ElaboratedTypeSpecifierId
+          <$> pos
+          <*> classKey
+          <*> option [] attributeSpecifierSeq
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> identifier
+  let template =
+        ElaboratedTypeSpecifierTemplate
+          <$> pos
+          <*> classKey
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> optionBool kwTemplate
+          <*> simpleTemplateId
+  let enum =
+        ElaboratedTypeSpecifierEnum
+          <$> pos
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> identifier
   choice [id, template, enum] <?> "elaborated type specifier"
 
 -- dcl.enum
@@ -1460,8 +1573,21 @@ enumSpecifier =
 
 enumHead :: P EnumHead
 enumHead = do
-  let simple = undefined
-  let nested = undefined
+  let simple =
+        EnumHead
+          <$> pos
+          <*> enumKey
+          <*> option [] attributeSpecifierSeq
+          <*> optionMaybe identifier
+          <*> optionMaybe enumBase
+  let nested =
+        EnumHeadNested
+          <$> pos
+          <*> enumKey
+          <*> option [] attributeSpecifierSeq
+          <*> nestedNameSpecifier
+          <*> identifier
+          <*> optionMaybe enumBase
   try simple <|> nested <?> "enum head"
 
 opaqueEnumDeclaration :: P Declaration
@@ -1495,8 +1621,12 @@ enumeratorList = sepBy1 enumeratorDefinition comma <?> "enumerator list"
 
 enumeratorDefinition :: P EnumeratorDefinition
 enumeratorDefinition = do
-  let simple   = undefined
-  let assigned = undefined
+  let simple = EnumeratorDefinition <$> pos <*> enumerator
+  let assigned =
+        EnumeratorDefinitionWithValue
+          <$> pos
+          <*> enumerator
+          <*> (opAssign >> expression)
   try simple <|> assigned <?> "enumerator definition"
 
 enumerator :: P Enumerator
@@ -1612,7 +1742,19 @@ qualifiedNamespaceSpecifier =
 --  	using typename[opt] ::opt nested-name-specifier unqualified-id ;
 --  	using :: unqualified-id ;
 usingDeclaration :: P Declaration
-usingDeclaration = undefined
+usingDeclaration = do
+  let usingNested = do
+        pos <- pos
+        kwUsing
+        t  <- optionMaybe typeName
+        dc <- optionBool doubleColon
+        n  <- nestedNameSpecifier
+        id <- unqualifiedId
+        semi
+        pure $ UsingNestedDeclaration pos t dc n id
+  let usingId =
+        UsingDeclaration <$> pos <*> (kwUsing >> doubleColon >> unqualifiedId)
+  try usingNested <|> usingId <?> "using declaration"
 
 -- namespace.udir
 -- using-directive:
@@ -1787,22 +1929,40 @@ initDeclarator =
 
 declarator :: P Declarator
 declarator = do
-  let ptr   = undefined
-  let noptr = undefined
+  let ptr = DeclaratorPtr <$> pos <*> ptrDeclarator
+  let noptr =
+        DeclaratorNoptr
+          <$> pos
+          <*> noptrDeclarator
+          <*> parametersAndQualifiers
+          <*> trailingReturnType
   ptr <|> noptr <?> "declarator"
 
 ptrDeclarator :: P PtrDeclarator
 ptrDeclarator = do
-  let ptr   = undefined
-  let noptr = undefined
+  let ptr   = PtrDeclarator <$> pos <*> ptrOperator <*> ptrDeclarator
+  let noptr = PtrDeclaratorNoptr <$> pos <*> noptrDeclarator
   ptr <|> noptr <?> "ptr declarator"
 
 noptrDeclarator :: P NoptrDeclarator
 noptrDeclarator = do
-  let noptr      = undefined
-  let parametred = undefined
-  let indexed    = undefined
-  let parensed   = undefined
+  let noptr =
+        NoptrDeclarator
+          <$> pos
+          <*> declaratorId
+          <*> option [] attributeSpecifierSeq
+  let parametred =
+        NoptrDeclaratorParametred
+          <$> pos
+          <*> noptrDeclarator
+          <*> parametersAndQualifiers
+  let indexed =
+        NoptrDeclaratorIndexed
+          <$> pos
+          <*> noptrDeclarator
+          <*> brackets constantExpression
+          <*> option [] attributeSpecifierSeq
+  let parensed = NoptrDeclaratorParensed <$> pos <*> parens ptrDeclarator
   choice [noptr, parametred, indexed, parensed] <?> "noptr declarator"
 
 -- parameters-and-qualifiers:
@@ -1844,10 +2004,23 @@ trailingReturnType =
 
 ptrOperator :: P PtrOperator
 ptrOperator = do
-  let star  = undefined
-  let ref   = undefined
-  let dref  = undefined
-  let nstar = undefined
+  let star =
+        StarOperator
+          <$> pos
+          <*> (opMul >> option [] attributeSpecifierSeq)
+          <*> option [] cvQualifierSeq
+  let ref = RefOperator <$> pos <*> (opAnd >> option [] attributeSpecifierSeq)
+  let dref =
+        DoubleRefOperator
+          <$> pos
+          <*> (opLogicalAnd >> option [] attributeSpecifierSeq)
+  let nstar =
+        NestedStarOperator
+          <$> pos
+          <*> optionBool doubleColon
+          <*> nestedNameSpecifier
+          <*> (opMul >> option [] attributeSpecifierSeq)
+          <*> option [] cvQualifierSeq
   choice [star, ref, dref, nstar] <?> "ptr operator"
 
 cvQualifierSeq :: P [CvQualifier]
@@ -1859,8 +2032,14 @@ cvQualifier =
 
 refQualifier :: P RefQualifier
 refQualifier = do
-  let ref  = undefined
-  let dref = undefined
+  let ref = do
+        pos <- pos
+        opAnd
+        pure $ RefQualifier pos
+  let dref = do
+        pos <- pos
+        opLogicalAnd
+        pure $ RefQualifierDouble pos
   ref <|> dref <?> "ref qualifier"
 
 -- declarator-id:
@@ -1868,8 +2047,14 @@ refQualifier = do
 --  	::opt nested-name-specifier[opt] class-name     C++0x
 declaratorId :: P DeclaratorId
 declaratorId = do
-  let id = undefined
-  let cl = undefined
+  let id =
+        DeclaratorIdExpression <$> pos <*> optionBool threeDot <*> idExpression
+  let cl =
+        DeclaratorIdClass
+          <$> pos
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> className
   id <|> cl <?> "declarator id"
 
 -- dcl.name
@@ -1896,22 +2081,44 @@ typeId =
 
 abstractDeclarator :: P AbstractDeclarator
 abstractDeclarator = do
-  let ptr   = undefined
-  let noptr = undefined
-  let dots  = undefined
+  let ptr = AbstractDeclaratorPtr <$> pos <*> ptrAbstractDeclarator
+  let noptr =
+        AbstractDeclaratorNoptr
+          <$> pos
+          <*> optionMaybe noptrAbstractDeclarator
+          <*> parametersAndQualifiers
+          <*> trailingReturnType
+  let dots = do
+        pos <- pos
+        threeDot
+        pure $ AbstractDeclaratorThreeDot pos
   ptr <|> noptr <|> dots <?> "abstract declarator"
 
 ptrAbstractDeclarator :: P PtrAbstractDeclarator
 ptrAbstractDeclarator = do
-  let ptr   = undefined
-  let noptr = undefined
+  let ptr =
+        PtrAbstractDeclarator
+          <$> pos
+          <*> ptrOperator
+          <*> optionMaybe ptrAbstractDeclarator
+  let noptr = PtrAbstractDeclaratorNoptr <$> pos <*> noptrAbstractDeclarator
   ptr <|> noptr <?> "ptr abstract declarator"
 
 noptrAbstractDeclarator :: P NoptrAbstractDeclarator
 noptrAbstractDeclarator = do
-  let noptr    = undefined
-  let array    = undefined
-  let parensed = undefined
+  let noptr =
+        NoptrAbstractDeclarator
+          <$> pos
+          <*> optionMaybe noptrAbstractDeclarator
+          <*> parametersAndQualifiers
+  let array =
+        ArrayNoptrAbstractDeclarator
+          <$> pos
+          <*> optionMaybe noptrAbstractDeclarator
+          <*> brackets constantExpression
+          <*> option [] attributeSpecifierSeq
+  let parensed =
+        ParensedPtrAbstractDeclarator <$> pos <*> parens ptrAbstractDeclarator
   choice [noptr, array, parensed] <?> "noptr abstract declarator"
 
 -- dcl.fct
@@ -1928,8 +2135,18 @@ noptrAbstractDeclarator = do
 --  	attribute-specifier-seq[opt] decl-specifier-seq abstract-declarator[opt] = initializer-clause     C++0x
 parameterDeclarationClause :: P ParameterDeclarationClause
 parameterDeclarationClause = do
-  let simple = undefined
-  let dotted = undefined
+  let simple =
+        ParameterDeclarationClause
+          <$> pos
+          <*> option [] parameterDeclarationList
+          <*> optionBool threeDot
+  let dotted = do
+        pos <- pos
+        ps  <- parameterDeclarationList
+        comma
+        threeDot
+        pure $ ParameterDeclarationClauseDotted pos ps
+--  let dotted' = ParameterDeclarationClauseDotted <$> pos <*> parameterDeclarationList `folBy` comma `folBy` threeDot 
   try simple <|> dotted <?> "parameter declaration list"
 
 parameterDeclarationList :: P [ParameterDeclaration]
@@ -1938,11 +2155,34 @@ parameterDeclarationList =
 
 parameterDeclaration :: P ParameterDeclaration
 parameterDeclaration = do
-  let param     = undefined
-  let inited    = undefined
-  let abstract  = undefined
-  let absInited = undefined
-  choice [param, inited, abstract, absInited] <?> "parameter declaration"
+  let param =
+        ParameterDeclaration
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> declSpecifierSeq
+          <*> declarator
+  let inited =
+        ParameterDeclarationInitialized
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> declSpecifierSeq
+          <*> declarator
+          <*> (opAssign *> initializerClause)
+  let abstract =
+        AbstractParameterDeclaration
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> declSpecifierSeq
+          <*> optionMaybe abstractDeclarator
+  let absInited =
+        AbstractParameterDeclarationInitialized
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> declSpecifierSeq
+          <*> optionMaybe abstractDeclarator
+          <*> (opAssign *> initializerClause)
+  choice [try param, try inited, try abstract, absInited]
+    <?> "parameter declaration"
 
 -- dcl.fct.def.general
 -- function-definition:
@@ -1954,15 +2194,31 @@ parameterDeclaration = do
 --  	function-try-block     C++0x
 functionDefinition :: P Declaration
 functionDefinition = do
-  let simple   = undefined
-  let default' = undefined
-  let delete   = undefined
-  choice [simple, default', delete] <?> "function definition"
+  let simple =
+        FunctionDefinition
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> optionMaybe declSpecifierSeq
+          <*> declarator
+          <*> functionBody
+  let default' =
+        FunctionDefaultDefinition
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> optionMaybe declSpecifierSeq
+          <*> (declarator <* opAssign <* kwDefault)
+  let delete =
+        FunctionDeleteDefinition
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> optionMaybe declSpecifierSeq
+          <*> (declarator <* opAssign <* kwDelete)
+  choice [try simple, try default', delete] <?> "function definition"
 
 functionBody :: P FunctionBody
 functionBody = do
-  let ctor     = undefined
-  let tryBlock = undefined
+  let ctor     = CtorBody <$> pos <*> optionMaybe ctorInitializer <*> statement
+  let tryBlock = FunctionBody <$> pos <*> functionTryBlock
   try ctor <|> tryBlock <?> "Function body"
 
 -- dcl.init
@@ -1983,20 +2239,20 @@ functionBody = do
 --  	{ }     C++0x
 initializer :: P Initializer
 initializer = do
-  let init = undefined
-  let bore = undefined
-  init <|> bore <?> "initializer"
+  let init = Initializer <$> pos <*> braceOrEqualInitializer
+  let par  = ParensedExpressionList <$> pos <*> expressionList
+  init <|> par <?> "initializer"
 
 braceOrEqualInitializer :: P BraceOrEqualInitializer
 braceOrEqualInitializer = do
-  let equal  = undefined
-  let braced = undefined
+  let equal  = EqualInitializer <$> pos <*> (opAssign *> initializerClause)
+  let braced = BraceInitializer <$> pos <*> bracedInitList
   equal <|> braced <?> "brace or equal initializer"
 
 initializerClause :: P InitializerClause
 initializerClause = do
-  let expr = undefined
-  let list = undefined
+  let expr = ExpressionInitializerClause <$> pos <*> assignmentExpression
+  let list = ListInitializerClause <$> pos <*> bracedInitList
   expr <|> list <?> "initializer clause"
 
 initializerList :: P InitializerList
@@ -2009,8 +2265,12 @@ initializerList =
 
 bracedInitList :: P BracedInitList
 bracedInitList = do
-  let list  = undefined
-  let empty = undefined
+  let list =
+        BracedInitList
+          <$> pos
+          <*> (leftBrace *> initializerList)
+          <*> (optionBool comma <* rightBrace)
+  let empty = EmptyBracedInitList <$> pos <* leftBrace <* rightBrace
   try list <|> empty <?> "braced init list"
 
 -- class
@@ -2036,8 +2296,8 @@ bracedInitList = do
 --  	union
 className :: P ClassName
 className = do
-  let simple   = undefined
-  let template = undefined
+  let simple   = ClassNameId <$> pos <*> identifier
+  let template = ClassNameTemplate <$> pos <*> simpleTemplateId
   simple <|> template <?> "class name"
 
 classSpecifier :: P ClassSpecifier
@@ -2050,8 +2310,20 @@ classSpecifier =
 
 classHead :: P ClassHead
 classHead = do
-  let simple = undefined
-  let opaque = undefined
+  let simple =
+        ClassHead
+          <$> pos
+          <*> classKey
+          <*> option [] attributeSpecifierSeq
+          <*> classHeadName
+          <*> classVirtSpecifierSeq
+          <*> optionMaybe baseClause
+  let opaque =
+        OpaqueClassHead
+          <$> pos
+          <*> classKey
+          <*> option [] attributeSpecifierSeq
+          <*> optionMaybe baseClause
   try simple <|> opaque <?> "class head"
 
 classHeadName :: P ClassHeadName
@@ -2112,18 +2384,36 @@ classKey =
 --  	= 0
 memberSpecification :: P MemberSpecification
 memberSpecification = do
-  let member = undefined
-  let access = undefined
+  let member =
+        MemberSpecification
+          <$> pos
+          <*> memberDeclaration
+          <*> optionMaybe memberSpecification
+  let access =
+        AccessSpecifiedMemberSpecification
+          <$> pos
+          <*> (accessSpecifier <* colon)
+          <*> optionMaybe memberSpecification
   member <|> access <?> "member specification"
 
 memberDeclaration :: P MemberDeclaration
 memberDeclaration = do
-  let decList  = undefined
-  let func     = undefined
-  let using    = undefined
-  let stAssert = undefined
-  let template = undefined
-  let alias    = undefined
+  let decList =
+        SimpleMemberDeclaration
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> optionMaybe declSpecifierSeq
+          <*> (option [] memberDeclaratorList <* semi)
+  let func =
+        FunctionMemberDeclaration
+          <$> pos
+          <*> functionDefinition
+          <*> optionBool semi
+  let using = UsingMemberDeclaration <$> pos <*> usingDeclaration
+  let stAssert =
+        StaticAssertMemberDeclaration <$> pos <*> staticAssertDeclaration
+  let template = TemplateMemberDeclaration <$> pos <*> templateDeclaration
+  let alias    = AliasMemberDeclaration <$> pos <*> aliasDeclaration
   choice [decList, func, using, stAssert, template, alias]
     <?> "member declaration"
 
@@ -2132,10 +2422,26 @@ memberDeclaratorList = memberDeclarator `sepBy1` comma
 
 memberDeclarator :: P MemberDeclarator
 memberDeclarator = do
-  let pure    = undefined
-  let braced  = undefined
-  let coloned = undefined
-  choice [pure, braced, coloned] <?> "member declarator"
+  let pure =
+        MemberDeclarator
+          <$> pos
+          <*> declarator
+          <*> option [] virtSpecifierSeq
+          <*> optionMaybe pureSpecifier
+  let braced =
+        InitializedMemberDeclarator
+          <$> pos
+          <*> declarator
+          <*> option [] virtSpecifierSeq
+          <*> optionMaybe braceOrEqualInitializer
+  let coloned =
+        ExpressionMemberDeclarator
+          <$> pos
+          <*> optionMaybe identifier
+          <*> option [] attributeSpecifierSeq
+          <*> option [] virtSpecifierSeq
+          <*> (colon *> constantExpression)
+  choice [try pure, braced, coloned] <?> "member declarator"
 
 virtSpecifierSeq :: P [VirtSpecifier]
 virtSpecifierSeq = many1 virtSpecifier
@@ -2190,15 +2496,35 @@ baseSpecifierList =
 
 baseSpecifier :: P BaseSpecifier
 baseSpecifier = do
-  let emptyAccess = undefined
-  let virtFirst   = undefined
-  let accessFirst = undefined
-  choice [emptyAccess, virtFirst, accessFirst] <?> "base specifier"
+  let emptyAccess =
+        BaseSpecifier
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> baseTypeSpecifier
+  let virtFirst =
+        VirtualBaseSpecifier
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> (kwVirtual *> optionMaybe accessSpecifier)
+          <*> baseTypeSpecifier
+  let accessFirst =
+        AccessSpecBaseSpecifier
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> accessSpecifier
+          <*> optionBool kwVirtual
+          <*> baseTypeSpecifier
+  choice [try emptyAccess, try virtFirst, accessFirst] <?> "base specifier"
 
 classOrDecltype :: P ClassOrDecltype
 classOrDecltype = do
-  let _class   = undefined
-  let decltype = undefined
+  let _class =
+        ClassOrDecltypeFirst
+          <$> pos
+          <*> optionBool doubleColon
+          <*> optionMaybe nestedNameSpecifier
+          <*> className
+  let decltype = ClassOrDecltypeSecond <$> pos <*> decltypeSpecifier
   _class <|> decltype <?> "class or decltype"
 
 baseTypeSpecifier :: P BaseTypeSpecifier
@@ -2209,9 +2535,9 @@ accessSpecifier :: P AccessSpecifier
 accessSpecifier =
   AccessSpecifier
     <$> pos
-    <*> (   (kwPublic >> pure Public)
-        <|> (kwProtected >> pure Protected)
-        <|> (kwPrivate >> pure Private)
+    <*> (   (kwPublic *> pure Public)
+        <|> (kwProtected *> pure Protected)
+        <|> (kwPrivate *> pure Private)
         )
     <?> "access specifier"
 
@@ -2226,7 +2552,7 @@ conversionFunctionId :: P ConversionFunctionId
 conversionFunctionId =
   ConversionFunctionId
     <$> pos
-    <*> (kwOperator >> conversionTypeId)
+    <*> (kwOperator *> conversionTypeId)
     <?> "conversion function id"
 
 conversionTypeId :: P ConversionTypeId
@@ -2273,8 +2599,11 @@ memInitializerList = do
 
 memInitializer :: P MemInitializer
 memInitializer = do
-  let parensed = undefined
-  let braced   = undefined
+  let parensed =
+        MemInitializerExpression <$> pos <*> memInitializerId <*> parens
+          (optionMaybe expressionList)
+  let braced =
+        MemInitializerBracedList <$> pos <*> memInitializerId <*> bracedInitList
   try parensed <|> braced <?> "mem initializer"
 
 memInitializerId :: P MemInitializerId
@@ -2333,8 +2662,13 @@ memInitializerId =
 --  	[]
 operatorFunctionId :: P OperatorFunctionId
 operatorFunctionId = do
-  let simple   = undefined
-  let template = undefined
+  let simple =
+        OperatorFunctionId <$> pos <*> (kwOperator *> overloadableOperator)
+  let template =
+        TemplateOperatorFunctionId
+          <$> pos
+          <*> (kwOperator *> overloadableOperator)
+          <*> angles (optionMaybe templateArgumentList)
   try simple <|> template <?> "operator function id"
 
 overloadableOperator :: P OverloadableOperator
@@ -2343,7 +2677,50 @@ overloadableOperator =
     <$> pos
     <*> overloadableOperatorType
     <?> "overlodable operator"
-  where overloadableOperatorType = undefined
+ where
+  overloadableOperatorType =
+    (kwNew $> OperatorNew)
+      <|> (kwDelete $> OperatorDelete)
+      <|> (kwNew *> leftBracket *> rightBracket $> OperatorNewArray)
+      <|> (kwDelete *> leftBracket *> rightBracket $> OperatorDeleteArray)
+      <|> (opPlus $> OperatorPlus)
+      <|> (opMinus $> OperatorMinus)
+      <|> (opMul $> OperatorMultiply)
+      <|> (opDiv $> OperatorDivide)
+      <|> (opRem $> OperatorRem)
+      <|> (opXor $> OperatorBitXor)
+      <|> (opAnd $> OperatorBitAnd)
+      <|> (opOr $> OperatorBitOr)
+      <|> (opTilda $> OperatorBitNot)
+      <|> (opNot $> OperatorLogicalNot)
+      <|> (opAssign $> OperatorAssign)
+      <|> (opGreater $> OperatorGreater)
+      <|> (opLess $> OperatorLess)
+      <|> (opAssignPlus $> OperatorAddAssign)
+      <|> (opAssignMinus $> OperatorSubAssign)
+      <|> (opAssignMul $> OperatorMulAssign)
+      <|> (opAssignDiv $> OperatorDivAssign)
+      <|> (opAssignRem $> OperatorRemAssign)
+      <|> (opAssignXor $> OperatorBitXorAssign)
+      <|> (opAssignAnd $> OperatorBitAndAssign)
+      <|> (opAssignOr $> OperatorBitOrAssign)
+      <|> (opLeftShift $> OperatorLeftShift)
+      <|> (opRightShift $> OperatorRightShift)
+      <|> (opAssignLeftShift $> OperatorLeftShiftAssign)
+      <|> (opAssignRightShift $> OperatorRightShiftAssign)
+      <|> (opEq $> OperatorEqual)
+      <|> (opNotEq $> OperatorNotEqual)
+      <|> (opLessEq $> OperatorLessOrEqual)
+      <|> (opGreaterEq $> OperatorGreaterOrEqual)
+      <|> (opLogicalAnd $> OperatorLogicalAnd)
+      <|> (opLogicalOr $> OperatorLogicalOr)
+      <|> (opIncrement $> OperatorIncrement)
+      <|> (opDecrement $> OperatorDecrement)
+      <|> (comma $> OperatorComma)
+      <|> (opArrow $> OperatorAccess)
+      <|> (opArrowPtr $> OperatorAccessPtr)
+      <|> (leftParen *> rightParen $> OperatorCall)
+      <|> (leftBracket *> rightBracket $> OperatorIndex)
 
 -- over.literal
 -- literal-operator-id:
@@ -2388,18 +2765,44 @@ templateParameterList = templateParameter `sepBy1` comma
 --  	template < template-parameter-list > class identifier[opt] = id-expression
 templateParameter :: P TemplateParameter
 templateParameter = do
-  let typeP = undefined
-  let param = undefined
+  let typeP = TemplateTypeParameter <$> pos <*> typeParameter
+  let param = TemplateParameterDeclaration <$> pos <*> parameterDeclaration
   typeP <|> param <?> "template parameter"
 
 typeParameter :: P TypeParameter
 typeParameter = do
-  let classSimple      = undefined
-  let classAssigned    = undefined
-  let typeSimple       = undefined
-  let typeAssigned     = undefined
-  let templateSimple   = undefined
-  let templateAssigned = undefined
+  let classSimple =
+        ClassParameter
+          <$> pos
+          <*> (kwClass *> optionBool threeDot)
+          <*> optionMaybe identifier
+  let classAssigned =
+        ClassWithIdParameter
+          <$> pos
+          <*> (kwClass *> optionMaybe identifier)
+          <*> (opAssign *> typeId)
+  let typeSimple =
+        TypenameParameter
+          <$> pos
+          <*> (kwTypename *> optionBool threeDot)
+          <*> optionMaybe identifier
+  let typeAssigned =
+        TypenameWithIdParameter
+          <$> pos
+          <*> (kwTypename *> optionMaybe identifier)
+          <*> (opAssign *> typeId)
+  let templateSimple =
+        TemplateParameter
+          <$> pos
+          <*> (kwTemplate *> angles (option [] templateParameterList))
+          <*> (kwClass *> optionBool threeDot)
+          <*> optionMaybe identifier
+  let templateAssigned =
+        TemplateWithIdParameter
+          <$> pos
+          <*> (kwTemplate *> angles (option [] templateParameterList))
+          <*> (kwClass *> optionMaybe identifier)
+          <*> (opAssign *> idExpression)
   choice
       [ try classSimple
       , classAssigned
@@ -2436,9 +2839,11 @@ simpleTemplateId =
 
 templateId :: P TemplateId
 templateId = do
-  let simple   = undefined
-  let operator = undefined
-  let literal  = undefined
+  let simple = TemplateIdSimple <$> pos <*> simpleTemplateId
+  let operator = TemplateIdOperator <$> pos <*> operatorFunctionId <*> angles
+        (optionMaybe templateArgumentList)
+  let literal = TemplateIdLiteral <$> pos <*> literalOperatorId <*> angles
+        (optionMaybe templateArgumentList)
   simple <|> operator <|> literal <?> "template id"
 
 templateName :: P TemplateName
@@ -2454,10 +2859,10 @@ templateArgumentList =
 
 templateArgument :: P TemplateArgument
 templateArgument = do
-  let constExpr = undefined
-  let tId       = undefined
-  let idExpr    = undefined
-  constExpr <|> tId <|> idExpr <?> "template argument"
+  let constExpr = TemplateArgument <$> pos <*> (Left <$> constantExpression)
+  let tId       = TemplateArgument <$> pos <*> (Right <$> typeId)
+  let idExpr    = TemplateArgument <$> pos <*> (Left <$> idExpression)
+  try constExpr <|> tId <|> idExpr <?> "template argument"
 
 -- temp.res
 -- typename-specifier:
@@ -2465,8 +2870,19 @@ templateArgument = do
 --  	typename ::opt nested-name-specifier template[opt] simple-template-id     C++0x
 typenameSpecifier :: P TypenameSpecifier
 typenameSpecifier = do
-  let id       = undefined
-  let template = undefined
+  let id =
+        TypenameSpecifier
+          <$> pos
+          <*> (kwTypename *> optionBool doubleColon)
+          <*> nestedNameSpecifier
+          <*> identifier
+  let template =
+        TypenameSpecifierTemplate
+          <$> pos
+          <*> (kwTypename *> optionBool doubleColon)
+          <*> nestedNameSpecifier
+          <*> optionBool kwTemplate
+          <*> simpleTemplateId
   try id <|> template <?> "typename specifier"
 
 -- temp.explicit
@@ -2533,9 +2949,19 @@ handler = do
 
 exceptionDeclaration :: P ExceptionDeclaration
 exceptionDeclaration = do
-  let decl    = undefined
-  let absDecl = undefined
-  let dots    = undefined
+  let decl =
+        ExceptionDeclaration
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> typeSpecifierSeq
+          <*> declarator
+  let absDecl =
+        ExceptionDeclarationAbstract
+          <$> pos
+          <*> option [] attributeSpecifierSeq
+          <*> typeSpecifierSeq
+          <*> optionMaybe abstractDeclarator
+  let dots = ThreeDotDeclaration <$> pos <* threeDot
   try decl <|> absDecl <|> dots <?> "exception declaration"
 
 throwExpression :: P Expression
@@ -2582,6 +3008,13 @@ typeIdList =
 
 noexceptSpecification :: P NoexceptSpecification
 noexceptSpecification = do
-  let expr   = undefined
-  let noexpr = undefined
+  let expr = do
+        pos <- pos
+        kwNoexcept
+        ex <- parens constantExpression
+        pure $ NoexceptSpecification pos ex
+  let noexpr = do
+        pos <- pos
+        kwNoexcept
+        pure $ NoexceptSpecificationEmpty pos
   try expr <|> noexpr <?> "noexcept specification"

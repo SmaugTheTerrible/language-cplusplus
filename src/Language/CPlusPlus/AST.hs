@@ -783,7 +783,7 @@ data Declaration
   --  	using :: unqualified-id ;
   | UsingDeclaration
       { _usingDeclarationPos :: SourcePos
-      , _usingDeclarationId  :: Identifier
+      , _usingDeclarationId  :: UnqualifiedId
       }
   --  	using-directive
   --  	attribute-specifier-seq[opt] using namespace ::opt nested-name-specifier[opt] namespace-name ;
@@ -822,7 +822,7 @@ data Declaration
   | FunctionDefinition
       { _functionDefinitionPos            :: SourcePos
       , _functionDefinitionAttributes     :: [AttributeSpecifier]
-      , _functionDefinitionDeclSpecifiers :: DeclSpecifierSeq
+      , _functionDefinitionDeclSpecifiers :: Maybe DeclSpecifierSeq
       , _functionDefinitionDeclarator     :: Declarator
       , _functionDefinitionBody           :: FunctionBody
       }
@@ -830,14 +830,14 @@ data Declaration
   | FunctionDefaultDefinition
       { _functionDefaultDefinitionPos            :: SourcePos
       , _functionDefaultDefinitionAttributes     :: [AttributeSpecifier]
-      , _functionDefaultDefinitionDeclSpecifiers :: DeclSpecifierSeq
+      , _functionDefaultDefinitionDeclSpecifiers :: Maybe DeclSpecifierSeq
       , _functionDefaultDefinitionDeclarator     :: Declarator
       }
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] declarator = delete ;     C++0x
   | FunctionDeleteDefinition
       { _functionDeleteDefinitionPos            :: SourcePos
       , _functionDeleteDefinitionAttributes     :: [AttributeSpecifier]
-      , _functionDeleteDefinitionDeclSpecifiers :: DeclSpecifierSeq
+      , _functionDeleteDefinitionDeclSpecifiers :: Maybe DeclSpecifierSeq
       , _functionDeleteDefinitionDeclarator     :: Declarator
       }
   --  	template-declaration
@@ -1138,7 +1138,8 @@ data EnumSpecifier =
 data EnumHead
   --  	enum-key attribute-specifier-seq[opt] identifier[opt] enum-base[opt]     C++0x
   = EnumHead
-      { _enumHeadKey        :: SourcePos
+      { _enumHeadPos        :: SourcePos
+      , _enumHeadKey        :: EnumKey
       , _enumHeadAttributes :: [AttributeSpecifier]
       , _enumHeadId         :: Maybe Identifier
       , _enumHeadBase       :: Maybe EnumBase
@@ -1719,6 +1720,7 @@ data MemberDeclaration
   --  	attribute-specifier-seq[opt] decl-specifier-seq[opt] member-declarator-list[opt] ;     C++0x
   = SimpleMemberDeclaration
       { _simpleMemberDeclarationPos            :: SourcePos
+      , _simpleMemberDeclarationAttributes     :: [AttributeSpecifier]
       , _simpleMemberDeclarationDeclSpecifiers :: Maybe DeclSpecifierSeq
       , _simpleMemberDeclarationList           :: [MemberDeclarator]
       }
